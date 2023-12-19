@@ -2,10 +2,11 @@
 
 import os
 
-from flask import Flask, render_template
+from flask import Flask, render_template, redirect, flash
 from flask_debugtoolbar import DebugToolbarExtension
 
-from models import connect_db, Cafe
+from models import db, connect_db, Cafe
+from forms import CafeForm
 
 
 app = Flask(__name__)
@@ -75,6 +76,53 @@ def cafe_list():
         'cafe/list.html',
         cafes=cafes,
     )
+
+
+@app.route('/cafes/add', methods=['GET', 'POST'])
+def cafe_add():
+    """Show form to add cafe"""
+
+    form = CafeForm()
+
+    if form.validate_on_submit():
+        # TODO: One-liner for this?
+        cafe = Cafe(
+            name=form.name.data,
+            description=form.description.data,
+            url=form.url.data,
+            address=form.address.data,
+            city_code=form.city_code.data,
+            image_url=form.image_url.data)
+
+        db.session.add(cafe)
+        db.session.commit()
+        flash(f'{cafe.name} added.')
+        return redirect(f'/cafes/{cafe.id}')
+
+    return render_template('cafe/add-form.html', form=form)
+
+
+@app.route('/cafes/<int:cafe_id>/edit/', methods=['GET', 'POST'])
+def cafe_edit(cafe_id):
+    """Show form to edit cafe"""
+
+    cafe = Cafe.query.get_or_404(cafe_id)
+    form = CafeForm()
+
+    if form.validate_on_submit():
+        cafe.name = form.name.data,
+        cafe.description = form.description.data,
+        cafe.url = form.url.data,
+        cafe.address = form.address.data,
+        cafe.city_code = form.city_code.data,
+        cafe.image_url = form.image_url.data
+
+        db.session.commit()
+        flash(f'{cafe.name} edited.')
+        return redirect(f'/cafes/{cafe.id}')
+
+    return render_template(
+        'cafe/edit-form.html', form=form, cafe_name=cafe.name, cafe_id=cafe.id)
 
 
 @app.get('/cafes/<int:cafe_id>')

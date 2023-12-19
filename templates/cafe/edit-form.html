@@ -4,8 +4,12 @@
 
 {% block content %}
 
-<h1 class="mb-4">Edit CafeName </h1>
+<h1 class="mb-4">Edit {{ cafe_name }}</h1>
 
-<!-- form goes here -->>
+<form action="/cafes/{{ cafe_id }}/edit" method="POST">
+    {% include "_form.html" %}
+    <button>Edit</button>
+</form>
+
 
 {% endblock %}
