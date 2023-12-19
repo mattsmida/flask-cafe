@@ -25,21 +25,23 @@ db.session.commit()
 c1 = Cafe(
     name="Bernie's Cafe",
     description='Serving locals in Noe Valley. A great place to sit and write'
-        ' and write Rithm exercises.',
+                ' and write Rithm exercises.',
     address="3966 24th St",
     city_code='sf',
     url='https://www.yelp.com/biz/bernies-san-francisco',
-    image_url='https://s3-media4.fl.yelpcdn.com/bphoto/bVCa2JefOCqxQsM6yWrC-A/o.jpg'
+    image_url='https://s3-media4.fl.yelpcdn.com/bphoto/'
+              'bVCa2JefOCqxQsM6yWrC-A/o.jpg'
 )
 
 c2 = Cafe(
     name='Perch Coffee',
     description='Hip and sleek place to get cardamom lattés when biking'
-        ' around Oakland.',
+                ' around Oakland.',
     address='440 Grand Ave',
     city_code='oak',
     url='https://perchoffee.com',
-    image_url='https://s3-media4.fl.yelpcdn.com/bphoto/0vhzcgkzIUIEPIyL2rF_YQ/o.jpg',
+    image_url='https://s3-media4.fl.yelpcdn.com/bphoto/'
+              '0vhzcgkzIUIEPIyL2rF_YQ/o.jpg',
 )
 
 db.session.add_all([c1, c2])
@@ -88,4 +90,4 @@ db.session.commit()
 # c1.save_map()
 # c2.save_map()
 #
-#db.session.commit()
+# db.session.commit()
