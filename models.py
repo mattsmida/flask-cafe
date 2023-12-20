@@ -29,6 +29,15 @@ class City(db.Model):
         nullable=False,
     )
 
+    def serialize(self):
+        """ Serialize to dictionary. """
+
+        return {
+            "code": self.code,
+            "name": self.name,
+            "state": self.state,
+        }
+
 
 class Cafe(db.Model):
     """Cafe information."""
@@ -82,6 +91,19 @@ class Cafe(db.Model):
 
         city = self.city
         return f'{city.name}, {city.state}'
+
+    def serialize(self):
+        """ Serialize to dictionary. """
+
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "url": self.url,
+            "address": self.address,
+            "city_code": self.city_code,
+            "image_url": self.image_url
+        }
 
 
 def connect_db(app):

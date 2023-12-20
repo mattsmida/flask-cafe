@@ -24,7 +24,7 @@ class CafeForm(FlaskForm):
 
     # TODO: This must change to SelectField and populate from DB.
     # TODO: Make it so that the user can enter stuff like Oakland, not 'oak'
-    city_code = StringField(
+    city_code = SelectField(
         "City",
         validators=[InputRequired()])
 

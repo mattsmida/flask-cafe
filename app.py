@@ -5,8 +5,10 @@ import os
 from flask import Flask, render_template, redirect, flash
 from flask_debugtoolbar import DebugToolbarExtension
 
-from models import db, connect_db, Cafe
+from models import db, connect_db, Cafe, City
 from forms import CafeForm
+
+import support
 
 
 app = Flask(__name__)
@@ -83,6 +85,11 @@ def cafe_add():
     """Show form to add cafe"""
 
     form = CafeForm()
+    # form.city_code.choices = [
+    #     (c.code, c.name) for c in City.query.order_by('name').all()]
+    form.city_code.choices = support.set_dropdown_choices(
+        City, 'code', 'name')
+    breakpoint()
 
     if form.validate_on_submit():
         # TODO: One-liner for this?
@@ -107,7 +114,9 @@ def cafe_edit(cafe_id):
     """Show form to edit cafe"""
 
     cafe = Cafe.query.get_or_404(cafe_id)
-    form = CafeForm()
+    form = CafeForm(obj=cafe)
+    form.city_code.choices = [
+        (c.code, c.name) for c in City.query.order_by('name').all()]
 
     if form.validate_on_submit():
         cafe.name = form.name.data,

@@ -14,6 +14,8 @@ db.create_all()
 sf = City(code='sf', name='San Francisco', state='CA')
 berk = City(code='berk', name='Berkeley', state='CA')
 oak = City(code='oak', name='Oakland', state='CA')
+den = City(code='den', name='Denver', state='CO')
+orl = City(code='orl', name='Orlando', state='FL')
 
 db.session.add_all([sf, berk, oak])
 db.session.commit()
