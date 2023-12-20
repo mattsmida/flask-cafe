@@ -7,6 +7,7 @@ from flask_sqlalchemy import SQLAlchemy
 
 bcrypt = Bcrypt()
 db = SQLAlchemy()
+DEFAULT_IMG_PATH = "/static/images/default-store.png"
 
 
 class City(db.Model):
@@ -78,7 +79,7 @@ class Cafe(db.Model):
     image_url = db.Column(
         db.Text,
         nullable=False,
-        default="/static/images/default-cafe.jpg",
+        default=DEFAULT_IMG_PATH,
     )
 
     city = db.relationship("City", backref='cafes')
