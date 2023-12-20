@@ -2,14 +2,16 @@
 
 
 import os
-import re
 
+os.environ["DATABASE_URL"] = "postgresql:///flaskcafe_test"
+
+import re
 from unittest import TestCase
+import support
 
 # from flask import session
 from app import app  # , CURR_USER_KEY
 from models import db, Cafe, City, connect_db  # , User, Like
-
 
 # Make Flask errors be real errors, rather than HTML pages with error info
 app.config['TESTING'] = True
@@ -20,7 +22,6 @@ app.config['DEBUG_TB_HOSTS'] = ['dont-show-debug-toolbar']
 # Don't req CSRF for testing
 app.config['WTF_CSRF_ENABLED'] = False
 
-os.environ["DATABASE_URL"] = "postgresql:///flaskcafe_test"
 db.drop_all()
 db.create_all()
 
@@ -64,12 +65,12 @@ CAFE_DATA = dict(
 )
 
 CAFE_DATA_EDIT = dict(
-    name="Cool Cafe",
-    description="Wow what a cool place",
-    url="http://example.com/cafe.jpg",
-    address="500 Kakoi St",
-    city_code="den",
-    image_url="http://example.com/cafe.jpg"
+    name="new-name",
+    description="new-description",
+    url="http://new-image.com/",
+    address="500 Sansome St",
+    city_code="sf",
+    image_url="http://new-image.com/"
 )
 
 # TEST_USER_DATA = dict(
@@ -258,57 +259,57 @@ class CafeAdminViewsTestCase(TestCase):
         db.session.commit()
 
     def test_add(self):
-        file = open('test-add-output.txt', 'w')
         with app.test_client() as client:
             resp = client.get(f"/cafes/add")
-            file.write(f'{resp.data}')
-            file.write('\n End of first response')
             self.assertIn(b'Add Cafe', resp.data)
+
             resp = client.post(
                 f"/cafes/add",
                 data=CAFE_DATA_EDIT,
-                follow_redirects=False)
-            file.write(f'{resp.data}')
-            file.write('\n End of second response')
+                follow_redirects=True)
             self.assertIn(b'added', resp.data)
 
-        file.close()
+    def test_dynamic_cities_vocab(self):
+        id = self.cafe_id
 
-    # def test_dynamic_cities_vocab(self):
-    #     id = self.cafe_id
+        # the following is a regular expression for the HTML for the drop-down
+        # menu pattern we want to check for
+        choices_pattern = re.compile(
+            r'<select [^>]*name="city_code"[^>]*><option [^>]*value="sf">' +
+            r'San Francisco</option></select>')
 
-    #     # the following is a regular expression for the HTML for the drop-down
-    #     # menu pattern we want to check for
-    #     choices_pattern = re.compile(
-    #         r'<select [^>]*name="city_code"[^>]*><option [^>]*value="sf">' +
-    #         r'San Francisco</option></select>')
+        with app.test_client() as client:
+            resp = client.get("/cafes/add", follow_redirects=True)
+            self.assertRegex(resp.data.decode('utf8'), choices_pattern)
 
-    #     with app.test_client() as client:
-    #         resp = client.get(f"/cafes/add")
-    #         self.assertRegex(resp.data.decode('utf8'), choices_pattern)
+            resp = client.get(f"/cafes/{id}/edit", follow_redirects=True)
+            self.assertRegex(resp.data.decode('utf8'), choices_pattern)
 
-    #         resp = client.get(f"/cafes/{id}/edit")
-    #         self.assertRegex(resp.data.decode('utf8'), choices_pattern)
+    def test_edit(self):
+        id = self.cafe_id
 
-    # def test_edit(self):
-    #     id = self.cafe_id
+        with app.test_client() as client:
+            resp = client.get(f"/cafes/{id}/edit", follow_redirects=True)
+            self.assertIn(b'Edit Test Cafe', resp.data)
 
-    #     with app.test_client() as client:
-    #         resp = client.get(f"/cafes/{id}/edit", follow_redirects=True)
-    #         self.assertIn(b'Edit Test Cafe', resp.data)
+            resp = client.post(
+                f"/cafes/{id}/edit",
+                data=CAFE_DATA_EDIT,
+                follow_redirects=True)
+            self.assertIn(b'edited', resp.data)
 
-    #         resp = client.post(
-    #             f"/cafes/{id}/edit",
-    #             data=CAFE_DATA_EDIT,
-    #             follow_redirects=True)
-    #         self.assertIn(b'edited', resp.data)
+    def test_edit_form_shows_curr_data(self):
+        id = self.cafe_id
 
-    # def test_edit_form_shows_curr_data(self):
-    #     id = self.cafe_id
+        with app.test_client() as client:
+            resp = client.get(f"/cafes/{id}/edit", follow_redirects=True)
+            self.assertIn(b'Test description', resp.data)
 
-    #     with app.test_client() as client:
-    #         resp = client.get(f"/cafes/{id}/edit", follow_redirects=True)
-    #         self.assertIn(b'Test description', resp.data)
+    def test_get_choices_vocab(self):
+        self.assertEqual(support.set_dropdown_choices(City, 'code', 'name'),
+                         [('sf', 'San Francisco')])
+        self.assertEqual(support.set_dropdown_choices(City, 'code', 'state'),
+                         [('sf', 'CA')])
 
 
 #######################################
