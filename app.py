@@ -78,6 +78,7 @@ def cafe_list():
     return render_template(
         'cafe/list.html',
         cafes=cafes,
+        category='success'
     )
 
 
@@ -166,7 +167,6 @@ def signup():
             image_url=form.image_url.data or DEFAULT_USER_IMG_PATH
         )
         do_login(user)
-        breakpoint()
         return redirect('/cafes')
 
     return render_template('auth/signup-form.html', form=form)
@@ -177,23 +177,22 @@ def login():
     form = LoginForm()
 
     if form.validate_on_submit():
-        user = User.authenticate(form)
+        user = User.authenticate(form.username.data, form.password.data)
         if user:
             do_login(user)
-            flash(f"Hello, {g.user.username}!")
-            redirect('/cafes')
+            flash(f"Hello, {user.username}!")
+            return redirect('/cafes')
         else:
             flash("Please try again.")
-            redirect('/login')
+            return redirect('/login')
 
     return render_template('auth/login-form.html', form=form)
 
 
 @app.post('/logout')
 def logout():
-    form = CSRFForm()
 
-    if form.validate_on_submit() and g.user:
-        g.user = None
+    if g.user:
+        do_logout()
         flash("You have successfully logged out.")
-        redirect('/')
+        return redirect('/')

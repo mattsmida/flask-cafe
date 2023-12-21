@@ -68,7 +68,7 @@ class LoginForm(FlaskForm):
         "Username",
         validators=[InputRequired()])
 
-    password = StringField(
+    password = PasswordField(
         "Password",
         validators=[InputRequired()])
 

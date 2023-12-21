@@ -41,11 +41,12 @@
         </li>
       </ul>
 
-      <!-- show when someone is logged in
-      <form class="form-inline my-2 my-lg-0">
+      <!-- show when someone is logged in -->
+      {% if g.user %}
+      <form action="/logout" method="POST" class="form-inline my-2 my-lg-0">
         <button class="btn-sm btn btn-outline-light">Log Out</button>
       </form>
-      -->
+      {% endif %}
 
     </div>
   </nav>

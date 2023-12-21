@@ -190,11 +190,14 @@ class User(db.Model):
         # TODO: Probably need something to handle failure of user creation
 
     @classmethod
-    def authenticate(self, form):
-        user = User.query.get(form.username.data)
-        password = form.password.data
-        pw_hash = user.password_hash
-        return user if bcrypt.check_password_hash(pw_hash, password) else False
+    def authenticate(self, username, password):
+        user = User.query.filter(User.username == username).first()
+        try:
+            hashed_pw = user.hashed_password
+        except AttributeError:  # query turned up nothing
+            return False
+        return user if bcrypt.check_password_hash(
+            hashed_pw, password) else False
 
     def serialize(self):
         """ Serialize to dictionary. """
