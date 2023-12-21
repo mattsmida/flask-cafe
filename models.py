@@ -226,7 +226,7 @@ class User(db.Model):
         }
 
 
-class UserCafe(db.Model):
+class Like(db.Model):
     """ A table for tracking which users like which cafes. """
 
     __tablename__ = 'users_cafes'

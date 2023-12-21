@@ -11,7 +11,7 @@ import support
 
 from flask import session
 from app import app, CURR_USER_KEY
-from models import db, Cafe, City, connect_db, User   # , Like
+from models import db, Cafe, City, connect_db, User, Like
 
 # Make Flask errors be real errors, rather than HTML pages with error info
 app.config['TESTING'] = True
@@ -117,6 +117,11 @@ ADMIN_USER_DATA = dict(
     email="admin@test.com",
     password="secret",
     admin=True,
+)
+
+TEST_LIKE_DATA = dict(
+    user_id=1,
+    cafe_id=1
 )
 
 
@@ -535,4 +540,52 @@ class ProfileViewsTestCase(TestCase):
 class LikeViewsTestCase(TestCase):
     """Tests for views on cafes."""
 
-    # FIXME: add setup/teardown/inidividual tests
+    def setUp(self):
+        """ Add a few users, cafes, and likes """
+
+        User.query.delete()
+        Cafe.query.delete()
+        Like.query.delete()
+
+        user = User.register(**TEST_USER_DATA)
+        db.session.add(user)
+
+        user_2 = User.register(**TEST_USER_DATA_2)
+        db.session.add(user_2)
+
+        cafe = Cafe(**CAFE_DATA)
+        db.session.add(cafe)
+
+        like = Like(**TEST_LIKE_DATA)
+        db.session.add(like)
+
+        self.user = user
+        self.user_2 = user_2
+        self.cafe = cafe
+        self.like = like
+
+        db.session.commit()
+
+    def tearDown(self):
+        """ Remove those users, cafes, and likes """
+
+        User.query.delete()
+        Cafe.query.delete()
+        Like.query.delete()
+        db.session.commit()
+
+    # What would I wanna test here?
+    # Make sure that a logged-in user with likes has likes displayed
+    # Make sure a logged-in user with no likes has "you don't like anything"
+
+    def profile_likes_view(self):
+        with app.test_client() as client:
+            login_for_test(self.user)
+            resp = client.get('/profile')
+            self.assertIn(b'Test Cafe', resp.data)
+
+    def profile_zero_likes_view(self):
+        with app.test_client() as client:
+            login_for_test(self.user)
+            resp = client.get('/profile')
+            self.assertIn(b'You don\'t like anything', resp.data)
