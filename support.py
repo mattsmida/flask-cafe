@@ -11,3 +11,13 @@ def set_dropdown_choices(model, value, label):
     records = [r.serialize() for r in model.query.order_by(label).all()]
     choices = [(r[value], r[label]) for r in records]
     return choices
+
+
+def ultra_print(message):
+    """ Print a bunch of stars so you can see your debug statement
+        in the console. """
+    for x in range(10):
+        if x == 5:
+            print(message)
+        else:
+            print("*" * 79)

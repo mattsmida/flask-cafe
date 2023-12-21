@@ -1,8 +1,9 @@
 """Forms for Flask Cafe."""
 
 from flask_wtf import FlaskForm
-from wtforms import StringField, TextAreaField, SelectField
-from wtforms.validators import InputRequired, Optional, Length, URL
+from wtforms import (StringField, TextAreaField, SelectField, PasswordField)
+from wtforms.validators import (InputRequired, Optional, Length, URL, Email)
+# TODO: import email_validator
 
 
 class CafeForm(FlaskForm):
@@ -22,8 +23,6 @@ class CafeForm(FlaskForm):
         "Physical Address",
         validators=[InputRequired()])
 
-    # TODO: This must change to SelectField and populate from DB.
-    # TODO: Make it so that the user can enter stuff like Oakland, not 'oak'
     city_code = SelectField(
         "City",
         validators=[InputRequired()])
@@ -31,3 +30,48 @@ class CafeForm(FlaskForm):
     image_url = StringField(
         "Photo",
         validators=[URL(), Optional()])
+
+
+class UserForm(FlaskForm):
+    """ Form for adding and editing users """
+
+    username = StringField(
+        "Username",
+        validators=[InputRequired(), Length(max=300)])
+
+    first_name = StringField(
+        "First name",
+        validators=[InputRequired(), Length(max=100)])
+
+    last_name = StringField(
+        "Last name",
+        validators=[Length(max=100)])
+
+    description = TextAreaField("Describe yourself.")
+
+    email = StringField(
+        "Email",
+        validators=[InputRequired()])
+
+    password = PasswordField(
+        "Password",
+        validators=[InputRequired(), Length(min=6, max=64)])
+
+    image_url = StringField(
+        "Photo",
+        validators=[URL(), Optional()])
+
+
+class LoginForm(FlaskForm):
+    """ Form for logging in """
+    username = StringField(
+        "Username",
+        validators=[InputRequired()])
+
+    password = StringField(
+        "Password",
+        validators=[InputRequired()])
+
+
+class CSRFForm(FlaskForm):
+    """ Empty form for CSRF protection """

@@ -260,11 +260,11 @@ class CafeAdminViewsTestCase(TestCase):
 
     def test_add(self):
         with app.test_client() as client:
-            resp = client.get(f"/cafes/add")
+            resp = client.get("/cafes/add")
             self.assertIn(b'Add Cafe', resp.data)
 
             resp = client.post(
-                f"/cafes/add",
+                "/cafes/add",
                 data=CAFE_DATA_EDIT,
                 follow_redirects=True)
             self.assertIn(b'added', resp.data)
