@@ -3,12 +3,13 @@
 
 from flask_bcrypt import Bcrypt
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.exc import IntegrityError
 
 
 bcrypt = Bcrypt()
 db = SQLAlchemy()
 DEFAULT_CAFE_IMG_PATH = "/static/images/default-store.png"
-DEFAULT_USER_IMG_PATH = "/static/images/default-pic.jpg"
+DEFAULT_USER_IMG_PATH = "/static/images/default-pic.png"
 
 
 class City(db.Model):
@@ -172,7 +173,8 @@ class User(db.Model):
     @classmethod
     def register(self, username, first_name, last_name, description, email,
                  password, image_url=None, admin=False):
-        """ Register a new user and handle password hashing. """
+        """ Register a new user and handle password hashing. Returns the
+            new user object on success or False on failure. """
         hash = bcrypt.generate_password_hash(password).decode('utf8')
 
         user = User(
@@ -184,10 +186,13 @@ class User(db.Model):
             image_url=image_url,
             hashed_password=hash
         )
-        db.session.add(user)
-        db.session.commit()
+        try:
+            db.session.add(user)
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            return False
         return user
-        # TODO: Probably need something to handle failure of user creation
 
     @classmethod
     def authenticate(self, username, password):

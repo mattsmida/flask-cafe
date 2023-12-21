@@ -6,6 +6,9 @@
 
 <h1 class="mb-4">Edit Profile</h1>
 
-<!-- form goes here -->
+<form action="/profile/edit", method="POST">
+    {% include "_form.html" %}
+    <button>Save</button>
+</form>
 
 {% endblock %}

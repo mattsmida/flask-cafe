@@ -7,7 +7,7 @@ from flask_debugtoolbar import DebugToolbarExtension
 
 from models import (db, connect_db, Cafe, City, User, DEFAULT_CAFE_IMG_PATH,
                     DEFAULT_USER_IMG_PATH)
-from forms import CafeForm, UserForm, LoginForm, CSRFForm
+from forms import CafeForm, SignupForm, LoginForm, CSRFForm, ProfileEditForm
 
 from support import set_dropdown_choices, ultra_print
 
@@ -129,7 +129,7 @@ def cafe_edit(cafe_id):
         cafe.url = form.url.data,
         cafe.address = form.address.data,
         cafe.city_code = form.city_code.data,
-        cafe.image_url = form.image_url.data or DEFAULT_CAFE_IMG_PATH
+        cafe.image_url = form.image_url.data.strip() or DEFAULT_CAFE_IMG_PATH
 
         db.session.commit()
         flash(f'{cafe.name} edited.')
@@ -153,7 +153,7 @@ def cafe_detail(cafe_id):
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
-    form = UserForm()
+    form = SignupForm()
 
     if form.validate_on_submit():
 
@@ -166,7 +166,11 @@ def signup():
             password=form.password.data,
             image_url=form.image_url.data or DEFAULT_USER_IMG_PATH
         )
+        if not user:
+            flash('Username already taken.')
+            return redirect('/signup')
         do_login(user)
+        flash('You are signed up and logged in.')
         return redirect('/cafes')
 
     return render_template('auth/signup-form.html', form=form)
@@ -183,7 +187,7 @@ def login():
             flash(f"Hello, {user.username}!")
             return redirect('/cafes')
         else:
-            flash("Please try again.")
+            flash("Invalid credentials.")
             return redirect('/login')
 
     return render_template('auth/login-form.html', form=form)
@@ -194,5 +198,47 @@ def logout():
 
     if g.user:
         do_logout()
-        flash("You have successfully logged out.")
-        return redirect('/')
+
+    flash("You have successfully logged out.")
+    return redirect('/')
+
+
+#######################################
+# users
+
+
+@app.get('/profile')
+def show_profile():
+    """ Show the profile page. """
+
+    if g.user:
+        return render_template('profile/detail.html')
+    else:
+        flash(NOT_LOGGED_IN_MSG)
+        return redirect('/login')
+
+
+@app.route('/profile/edit', methods=['GET', 'POST'])
+def edit_profile():
+    """ Show and process the profile edit form. """
+
+    if not g.user:
+        flash(NOT_LOGGED_IN_MSG)
+        return redirect('/cafes')
+
+    form = ProfileEditForm(obj=g.user)
+    if form.image_url.data == DEFAULT_USER_IMG_PATH:
+        form.image_url.data = ''
+    if form.validate_on_submit():
+        g.user.first_name = form.first_name.data
+        g.user.last_name = form.last_name.data
+        g.user.description = form.description.data
+        g.user.email = form.email.data
+        g.user.image_url = form.image_url.data.strip() or DEFAULT_USER_IMG_PATH
+
+        db.session.commit()
+        flash('Profile edited')
+        return redirect('/profile')
+
+    else:
+        return render_template('profile/edit-form.html', form=form)

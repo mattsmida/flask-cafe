@@ -32,7 +32,7 @@ class CafeForm(FlaskForm):
         validators=[URL(), Optional()])
 
 
-class UserForm(FlaskForm):
+class SignupForm(FlaskForm):
     """ Form for adding and editing users """
 
     username = StringField(
@@ -56,6 +56,28 @@ class UserForm(FlaskForm):
     password = PasswordField(
         "Password",
         validators=[InputRequired(), Length(min=6, max=64)])
+
+    image_url = StringField(
+        "Photo",
+        validators=[URL(), Optional()])
+
+
+class ProfileEditForm(FlaskForm):
+    """ Form for editing user profiles """
+
+    first_name = StringField(
+        "First name",
+        validators=[InputRequired(), Length(max=100)])
+
+    last_name = StringField(
+        "Last name",
+        validators=[Length(max=100)])
+
+    description = TextAreaField("Describe yourself.")
+
+    email = StringField(
+        "Email",
+        validators=[InputRequired()])
 
     image_url = StringField(
         "Photo",
