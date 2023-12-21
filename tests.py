@@ -574,10 +574,6 @@ class LikeViewsTestCase(TestCase):
         Like.query.delete()
         db.session.commit()
 
-    # What would I wanna test here?
-    # Make sure that a logged-in user with likes has likes displayed
-    # Make sure a logged-in user with no likes has "you don't like anything"
-
     def profile_likes_view(self):
         with app.test_client() as client:
             login_for_test(self.user)
