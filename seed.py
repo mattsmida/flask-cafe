@@ -79,11 +79,11 @@ db.session.commit()
 #######################################
 # add likes
 
-# u1.liked_cafes.append(c1)
-# u1.liked_cafes.append(c2)
-# ua.liked_cafes.append(c1)
+u1.liked_cafes.append(c1)
+u1.liked_cafes.append(c2)
+ua.liked_cafes.append(c1)
 
-# db.session.commit()
+db.session.commit()
 
 
 #######################################

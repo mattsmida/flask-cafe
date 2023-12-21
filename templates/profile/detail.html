@@ -26,6 +26,20 @@
 
   </div>
 
+
+  <div id="liked-cafes" class="col-12 col-sm-10 col-md-8">
+    <h2> Liked cafes </h2>
+    <ul>
+      {% if likes %}
+        {% for like in likes %}
+          <li><a href="/cafes/{{ like.id }}">{{ like.name }}</a></li>
+        {% endfor %}
+      {% else %}
+        <p>You don't like anything.</p>
+      {% endif %}
+    </ul>
+  </div>
+
 </div>
 
 {% endblock %}

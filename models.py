@@ -42,26 +42,6 @@ class City(db.Model):
         }
 
 
-class UserCafe(db.Model):
-    """ A table for tracking which users like which cafes. """
-
-    __tablename__ = 'users_cafes'
-
-    user_id = db.Column(
-        db.Integer,
-        db.ForeignKey('users.id'),
-        nullable=False,
-        primary_key=True
-    )
-
-    cafe_id = db.Column(
-        db.Integer,
-        db.ForeignKey('cafes.id'),
-        nullable=False,
-        primary_key=True
-    )
-
-
 class Cafe(db.Model):
     """Cafe information."""
 
@@ -106,7 +86,8 @@ class Cafe(db.Model):
 
     city = db.relationship("City", backref='cafes')
 
-    liking_users = db.relationship('UserCafe', backref='cafes')
+    liking_users = db.relationship('User', secondary='users_cafes',
+                                   backref='cafes')
 
     def __repr__(self):
         return f'<Cafe id={self.id} name="{self.name}">'
@@ -192,7 +173,8 @@ class User(db.Model):
 
         return f'{self.first_name} {self.last_name}'
 
-    liked_cafes = db.relationship('UserCafe', backref='users')
+    liked_cafes = db.relationship('Cafe', secondary='users_cafes',
+                                  backref='users')
 
     @classmethod
     def register(self, username, first_name, last_name, description, email,
@@ -242,6 +224,26 @@ class User(db.Model):
             "image_url": self.image_url,
             "hashed_password": self.hashed_password,
         }
+
+
+class UserCafe(db.Model):
+    """ A table for tracking which users like which cafes. """
+
+    __tablename__ = 'users_cafes'
+
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey('users.id'),
+        nullable=False,
+        primary_key=True
+    )
+
+    cafe_id = db.Column(
+        db.Integer,
+        db.ForeignKey('cafes.id'),
+        nullable=False,
+        primary_key=True
+    )
 
 
 def connect_db(app):

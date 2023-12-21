@@ -11,7 +11,7 @@ import support
 
 from flask import session
 from app import app, CURR_USER_KEY
-from models import db, Cafe, City, connect_db, User  #, Like
+from models import db, Cafe, City, connect_db, User   # , Like
 
 # Make Flask errors be real errors, rather than HTML pages with error info
 app.config['TESTING'] = True

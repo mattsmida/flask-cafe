@@ -212,7 +212,9 @@ def show_profile():
     """ Show the profile page. """
 
     if g.user:
-        return render_template('profile/detail.html')
+        likes = User.query.filter(
+            User.username == g.user.username).first().liked_cafes
+        return render_template('profile/detail.html', likes=likes)
     else:
         flash(NOT_LOGGED_IN_MSG)
         return redirect('/login')
