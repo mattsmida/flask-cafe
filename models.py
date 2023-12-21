@@ -42,6 +42,26 @@ class City(db.Model):
         }
 
 
+class UserCafe(db.Model):
+    """ A table for tracking which users like which cafes. """
+
+    __tablename__ = 'users_cafes'
+
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey('users.id'),
+        nullable=False,
+        primary_key=True
+    )
+
+    cafe_id = db.Column(
+        db.Integer,
+        db.ForeignKey('cafes.id'),
+        nullable=False,
+        primary_key=True
+    )
+
+
 class Cafe(db.Model):
     """Cafe information."""
 
@@ -85,6 +105,8 @@ class Cafe(db.Model):
     )
 
     city = db.relationship("City", backref='cafes')
+
+    liking_users = db.relationship('UserCafe', backref='cafes')
 
     def __repr__(self):
         return f'<Cafe id={self.id} name="{self.name}">'
@@ -169,6 +191,8 @@ class User(db.Model):
         """ Return the user's full name as a string. """
 
         return f'{self.first_name} {self.last_name}'
+
+    liked_cafes = db.relationship('UserCafe', backref='users')
 
     @classmethod
     def register(self, username, first_name, last_name, description, email,
