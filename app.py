@@ -2,7 +2,7 @@
 
 import os
 
-from flask import Flask, render_template, redirect, flash, g, session
+from flask import Flask, render_template, redirect, flash, g, session, request
 from flask_debugtoolbar import DebugToolbarExtension
 
 from models import (db, connect_db, Cafe, City, User, DEFAULT_CAFE_IMG_PATH,
@@ -244,3 +244,30 @@ def edit_profile():
 
     else:
         return render_template('profile/edit-form.html', form=form)
+
+#######################################
+# likes
+
+
+@app.get('/api/likes')
+def does_user_like_cafe():
+    """ For a GET request, return whether user likes the cafe in the
+        query string as a boolean
+            Receive q-string ?cafe_id=1 --> return {"likes": true|false} """
+
+    cafe_id = request.args['cafe_id']
+    return {"likes": int(cafe_id) in [cafe.id for cafe in g.user.liked_cafes]}
+
+
+@app.post('/api/likes')
+def user_like_cafe():
+    """ For a POST request, given JSON with a cafe_id, make the current
+        user like the cafe.
+        E.g.,
+            Receive {"cafe_id": 1} --> user now likes cafe 1 """
+
+    cafe_id = request.json['cafe_id']
+
+    g.user.liked_cafes.append(cafe_id)
+    db.session.add(g.user.liked_cafes)
+    db.session.commit()

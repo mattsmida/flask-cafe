@@ -1,6 +1,6 @@
 """Initial data."""
 
-from models import City, Cafe, User, db
+from models import City, Cafe, User, Like, db
 
 from app import app
 

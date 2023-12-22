@@ -86,7 +86,7 @@ class Cafe(db.Model):
 
     city = db.relationship("City", backref='cafes')
 
-    liking_users = db.relationship('User', secondary='users_cafes',
+    liking_users = db.relationship('User', secondary='likes',
                                    backref='cafes')
 
     def __repr__(self):
@@ -173,7 +173,7 @@ class User(db.Model):
 
         return f'{self.first_name} {self.last_name}'
 
-    liked_cafes = db.relationship('Cafe', secondary='users_cafes',
+    liked_cafes = db.relationship('Cafe', secondary='likes',
                                   backref='users')
 
     @classmethod
@@ -229,7 +229,7 @@ class User(db.Model):
 class Like(db.Model):
     """ A table for tracking which users like which cafes. """
 
-    __tablename__ = 'users_cafes'
+    __tablename__ = 'likes'
 
     user_id = db.Column(
         db.Integer,
