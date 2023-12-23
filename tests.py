@@ -538,50 +538,62 @@ class ProfileViewsTestCase(TestCase):
 
 
 class LikeViewsTestCase(TestCase):
-    """Tests for views on cafes."""
+    """Tests for views on likes."""
 
     def setUp(self):
         """ Add a few users, cafes, and likes """
 
         User.query.delete()
         Cafe.query.delete()
+        City.query.delete()
         Like.query.delete()
 
         user = User.register(**TEST_USER_DATA)
         db.session.add(user)
 
-        user_2 = User.register(**TEST_USER_DATA_2)
-        db.session.add(user_2)
+        # user_2 = User.register(**TEST_USER_DATA_2)
+        # db.session.add(user_2)
 
         cafe = Cafe(**CAFE_DATA)
         db.session.add(cafe)
 
+        sf = City(**CITY_DATA)
+        db.session.add(sf)
+
         like = Like(**TEST_LIKE_DATA)
         db.session.add(like)
 
-        self.user = user
-        self.user_2 = user_2
-        self.cafe = cafe
-        self.like = like
-
         db.session.commit()
+
+        self.user = user
+        # self.user_2 = user_2
+        self.cafe = cafe
+        self.sf = sf
+        self.like = like
 
     def tearDown(self):
         """ Remove those users, cafes, and likes """
 
         User.query.delete()
         Cafe.query.delete()
+        City.query.delete()
         Like.query.delete()
         db.session.commit()
 
-    def profile_likes_view(self):
+    def test_profile_likes_view(self):
         with app.test_client() as client:
             login_for_test(self.user)
             resp = client.get('/profile')
             self.assertIn(b'Test Cafe', resp.data)
 
-    def profile_zero_likes_view(self):
-        with app.test_client() as client:
-            login_for_test(self.user)
-            resp = client.get('/profile')
-            self.assertIn(b'You don\'t like anything', resp.data)
+    # def test_profile_zero_likes_view(self):
+    #     with app.test_client() as client:
+    #         login_for_test(self.user)
+    #         resp = client.get('/profile')
+    #         self.assertIn(b'You don\'t like anything', resp.data)
+
+    # def test_get_like(self):
+    #     with app.test_client() as client:
+    #         login_for_test(self.user)
+    #         resp = client.get('/api/likes?cafe_id=1')
+    #         self.assertDictEqual({'cafe_id': True}, resp.json())

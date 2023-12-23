@@ -259,15 +259,30 @@ def does_user_like_cafe():
     return {"likes": int(cafe_id) in [cafe.id for cafe in g.user.liked_cafes]}
 
 
-@app.post('/api/likes')
+@app.post('/api/like')
 def user_like_cafe():
     """ For a POST request, given JSON with a cafe_id, make the current
         user like the cafe.
         E.g.,
             Receive {"cafe_id": 1} --> user now likes cafe 1 """
 
-    cafe_id = request.json['cafe_id']
+    cafe_id = request.get.json['cafe_id']
 
     g.user.liked_cafes.append(cafe_id)
     db.session.add(g.user.liked_cafes)
     db.session.commit()
+
+
+@app.post('/api/unlike')
+def user_unlike_cafe():
+    """ For a POST request, given JSON with a cafe_id, make the current
+        user un-like the cafe.
+        E.g.,
+            Receive {"cafe_id": 1} --> user now likes cafe 1 """
+
+    cafe_id = request.get.json['cafe_id']
+
+    g.user.liked_cafes.remove(cafe_id)
+    db.session.add(g.user.liked_cafes)
+    db.session.commit()
+
