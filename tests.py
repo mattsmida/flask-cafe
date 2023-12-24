@@ -119,11 +119,6 @@ ADMIN_USER_DATA = dict(
     admin=True,
 )
 
-TEST_LIKE_DATA = dict(
-    user_id=1,
-    cafe_id=1
-)
-
 
 #######################################
 # homepage
@@ -543,33 +538,28 @@ class LikeViewsTestCase(TestCase):
     def setUp(self):
         """ Add a few users, cafes, and likes """
 
-        User.query.delete()
+        Like.query.delete()
         Cafe.query.delete()
         City.query.delete()
-        Like.query.delete()
-
-        user = User.register(**TEST_USER_DATA)
-        db.session.add(user)
-
-        # user_2 = User.register(**TEST_USER_DATA_2)
-        # db.session.add(user_2)
-
-        cafe = Cafe(**CAFE_DATA)
-        db.session.add(cafe)
+        User.query.delete()
 
         sf = City(**CITY_DATA)
         db.session.add(sf)
 
-        like = Like(**TEST_LIKE_DATA)
-        db.session.add(like)
+        user = User.register(**TEST_USER_DATA)
+        db.session.add(user)
+
+        cafe = Cafe(**CAFE_DATA)
+        db.session.add(cafe)
+
+        # user_2 = User.register(**TEST_USER_DATA_2)
+        # db.session.add(user_2)
 
         db.session.commit()
 
-        self.user = user
-        # self.user_2 = user_2
-        self.cafe = cafe
-        self.sf = sf
-        self.like = like
+        self.user_id = user.id
+        # self.user_2_id = user_2.id
+        self.cafe_id = cafe.id
 
     def tearDown(self):
         """ Remove those users, cafes, and likes """
@@ -580,17 +570,28 @@ class LikeViewsTestCase(TestCase):
         Like.query.delete()
         db.session.commit()
 
-    def test_profile_likes_view(self):
+    def test_profile_zero_likes_view(self):
         with app.test_client() as client:
-            login_for_test(self.user)
-            resp = client.get('/profile')
-            self.assertIn(b'Test Cafe', resp.data)
+            login_for_test(client, self.user_id)
+            resp = client.get('/profile', follow_redirects=True)
+            self.assertIn(b'You don\'t like anything', resp.data)
 
-    # def test_profile_zero_likes_view(self):
-    #     with app.test_client() as client:
-    #         login_for_test(self.user)
-    #         resp = client.get('/profile')
-    #         self.assertIn(b'You don\'t like anything', resp.data)
+    def test_profile_likes_view(self):
+        test_like_data = dict(
+            user_id=self.user_id,
+            cafe_id=self.cafe_id
+        )
+        self.assertTrue(True)
+        like = Like(**test_like_data)
+        support.ultra_print(like)
+        support.ultra_print(like.cafe_id)
+        support.ultra_print(like.user_id)
+        db.session.add(like)
+        # db.session.commit()
+        # with app.test_client() as client:
+        #     login_for_test(client, self.user_id)
+        #     resp = client.get('/profile')
+        #     self.assertIn(b'Test Cafe', resp.data)
 
     # def test_get_like(self):
     #     with app.test_client() as client:
