@@ -1,10 +1,8 @@
 """Data models for Flask Cafe"""
 
-
 from flask_bcrypt import Bcrypt
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.exc import IntegrityError
-
 
 bcrypt = Bcrypt()
 db = SQLAlchemy()
@@ -233,17 +231,20 @@ class Like(db.Model):
 
     user_id = db.Column(
         db.Integer,
-        db.ForeignKey('users.id'),
+        db.ForeignKey('users.id', ondelete='CASCADE'),
         nullable=False,
         primary_key=True
     )
 
     cafe_id = db.Column(
         db.Integer,
-        db.ForeignKey('cafes.id'),
+        db.ForeignKey('cafes.id', ondelete='CASCADE'),
         nullable=False,
         primary_key=True
     )
+
+    def __repr__(self):
+        return f'<Like user_id={self.user_id} cafe_id={self.cafe_id}>'
 
 
 def connect_db(app):

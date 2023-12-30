@@ -5,8 +5,8 @@ import os
 from flask import Flask, render_template, redirect, flash, g, session, request
 from flask_debugtoolbar import DebugToolbarExtension
 
-from models import (db, connect_db, Cafe, City, User, DEFAULT_CAFE_IMG_PATH,
-                    DEFAULT_USER_IMG_PATH)
+from models import (db, connect_db, Cafe, City, User, Like,
+                    DEFAULT_CAFE_IMG_PATH, DEFAULT_USER_IMG_PATH)
 from forms import CafeForm, SignupForm, LoginForm, CSRFForm, ProfileEditForm
 
 from support import set_dropdown_choices, ultra_print
@@ -255,6 +255,7 @@ def does_user_like_cafe():
         query string as a boolean
             Receive q-string ?cafe_id=1 --> return {"likes": true|false} """
 
+    # TODO: Each of these API routes needs user login verification.
     cafe_id = request.args['cafe_id']
     return {"likes": int(cafe_id) in [cafe.id for cafe in g.user.liked_cafes]}
 
@@ -266,11 +267,12 @@ def user_like_cafe():
         E.g.,
             Receive {"cafe_id": 1} --> user now likes cafe 1 """
 
-    cafe_id = request.get.json['cafe_id']
-
-    g.user.liked_cafes.append(cafe_id)
-    db.session.add(g.user.liked_cafes)
+    # TODO: Each of these API routes needs user login verification.
+    cafe_id = request.json['cafe_id']
+    liked_cafe = Cafe.query.get(cafe_id)
+    g.user.liked_cafes.append(liked_cafe)
     db.session.commit()
+    return {"liked": cafe_id}
 
 
 @app.post('/api/unlike')
@@ -278,11 +280,14 @@ def user_unlike_cafe():
     """ For a POST request, given JSON with a cafe_id, make the current
         user un-like the cafe.
         E.g.,
-            Receive {"cafe_id": 1} --> user now likes cafe 1 """
+            Receive {"cafe_id": 1} --> user no longers likes cafe 1"""
 
-    cafe_id = request.get.json['cafe_id']
+    # TODO: Each of these API routes needs user login verification.
+    cafe_id = int(request.json['cafe_id'])
+    liked_cafe = Cafe.query.get(cafe_id)
+    if liked_cafe:
+        g.user.liked_cafes.remove(liked_cafe)
+        db.session.commit()
+    return {"unliked": cafe_id}
 
-    g.user.liked_cafes.remove(cafe_id)
-    db.session.add(g.user.liked_cafes)
-    db.session.commit()
 
