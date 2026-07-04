@@ -15,6 +15,7 @@ import { TrendStrips } from '../components/TrendStrips';
 import { saveCheckin, subscribeRecentCheckins } from '../lib/checkins';
 import { partnerUid } from '../lib/couple';
 import { todayKey } from '../lib/dates';
+import { notifyPartner } from '../lib/push';
 import type { Checkin, Session } from '../lib/types';
 import { colors, radius, spacing, type } from '../theme';
 
@@ -66,6 +67,8 @@ export function CheckinScreen({ session }: Props) {
         connection,
         word: word.trim(),
       });
+      // Only the first save of the day pings the partner — edits stay quiet.
+      if (!savedToday) notifyPartner(coupleId, 'checkin');
       setSavedToday(true);
       setEditing(false);
     } finally {

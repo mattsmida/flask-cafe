@@ -1,47 +1,135 @@
 /**
- * Best-effort push for sparks, via Expo's push service — the sender's phone
- * calls the Expo push API directly, so no server is needed.
+ * Web Push, the standard VAPID flow — no Firebase/FCM anywhere.
  *
- * Note: Expo Go (SDK 53+) no longer supports receiving remote pushes; in Expo
- * Go, sparks still arrive live whenever the app is open (Firestore listener).
- * Build a development build or TestFlight build to get real notifications.
+ * On iOS this works for a web app that has been installed via Share →
+ * Add to Home Screen (iOS 16.4+), and Notification.requestPermission()
+ * must be called from a user gesture — so enablePush is wired to a button
+ * on the Us tab, never called on load.
+ *
+ * Delivery goes: this device saves its PushSubscription into its statuses
+ * row → any action calls notifyPartner() → the send-push Edge Function
+ * (which holds the VAPID private key) pushes to the partner's subscription.
  */
-import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
+import { isPushConfigured, supabaseConfig } from '../config/supabaseConfig';
+import { savePushSubscription } from './status';
+import { getClient } from './supabase';
 
-export async function registerForPush(): Promise<string | null> {
+export type PushAvailability =
+  | 'ready' // supported here; just needs the user to enable it
+  | 'enabled' // this browser already holds a subscription
+  | 'needs-install' // iOS Safari, but not installed to the home screen yet
+  | 'denied' // the user blocked notifications for this app
+  | 'unsupported' // native app or a browser without Web Push
+  | 'unconfigured'; // no VAPID public key pasted yet
+
+function hasWebPushApis(): boolean {
+  return (
+    typeof navigator !== 'undefined' &&
+    'serviceWorker' in navigator &&
+    typeof window !== 'undefined' &&
+    'PushManager' in window &&
+    typeof Notification !== 'undefined'
+  );
+}
+
+function isIOS(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return (
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    // iPadOS masquerades as macOS but is touch-first.
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  );
+}
+
+/** True when running as an installed (home-screen / standalone) web app. */
+export function isInstalledPwa(): boolean {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return false;
+  return (
+    window.matchMedia?.('(display-mode: standalone)').matches ||
+    (navigator as Navigator & { standalone?: boolean }).standalone === true
+  );
+}
+
+/** Registers the push service worker; call once at startup (web only). */
+export async function registerServiceWorker(): Promise<void> {
+  if (Platform.OS !== 'web' || typeof navigator === 'undefined') return;
+  if (!('serviceWorker' in navigator)) return;
   try {
-    if (!Device.isDevice) return null;
-    const { status: existing } = await Notifications.getPermissionsAsync();
-    let status = existing;
-    if (existing !== 'granted') {
-      ({ status } = await Notifications.requestPermissionsAsync());
-    }
-    if (status !== 'granted') return null;
-    const token = await Notifications.getExpoPushTokenAsync();
-    return token.data;
+    await navigator.serviceWorker.register('/sw.js');
   } catch {
-    // Expo Go can't register for remote push — quietly fall back to in-app sparks.
-    return null;
+    // No service worker → no push, but the app itself is unaffected.
   }
 }
 
-export async function sendSparkPush(
-  pushToken: string,
-  fromName: string,
-): Promise<void> {
+export function getPushAvailability(): PushAvailability {
+  if (Platform.OS !== 'web') return 'unsupported';
+  if (!isPushConfigured()) return 'unconfigured';
+  if (isIOS() && !isInstalledPwa()) return 'needs-install';
+  if (!hasWebPushApis()) return 'unsupported';
+  if (Notification.permission === 'denied') return 'denied';
+  return 'ready';
+}
+
+/** Does this browser already hold a push subscription? */
+export async function hasPushSubscription(): Promise<boolean> {
+  if (getPushAvailability() !== 'ready') return false;
   try {
-    await fetch('https://exp.host/--/api/v2/push/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        to: pushToken,
-        title: '✨ A spark',
-        body: `${fromName} is thinking of you.`,
-        sound: 'default',
-      }),
-    });
+    const registration = await navigator.serviceWorker.getRegistration();
+    return !!(await registration?.pushManager.getSubscription());
   } catch {
-    // The spark still lands via Firestore; push is a bonus.
+    return false;
+  }
+}
+
+function urlBase64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
+  const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+  const raw = atob(padded.replace(/-/g, '+').replace(/_/g, '/'));
+  const bytes = new Uint8Array(new ArrayBuffer(raw.length));
+  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+  return bytes;
+}
+
+/**
+ * Asks for notification permission, subscribes, and saves the subscription
+ * where the Edge Function can find it. Must run inside a user gesture.
+ */
+export async function enablePush(coupleId: string, uid: string): Promise<void> {
+  const availability = getPushAvailability();
+  if (availability === 'needs-install') {
+    throw new Error('Install Ember to your home screen first.');
+  }
+  if (availability !== 'ready') {
+    throw new Error('Notifications aren’t available here.');
+  }
+  const registration = await navigator.serviceWorker.getRegistration();
+  if (!registration) throw new Error('The service worker isn’t ready yet — reload and try again.');
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') {
+    throw new Error('Notifications weren’t allowed.');
+  }
+  const subscription = await registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(supabaseConfig.vapidPublicKey),
+  });
+  await savePushSubscription(coupleId, uid, subscription.toJSON());
+}
+
+export type PushKind = 'spark' | 'answer' | 'checkin';
+
+/**
+ * Fire-and-forget: asks the send-push Edge Function to notify the partner's
+ * device. Everything still syncs live without it — push is the bonus for
+ * when the partner's app is closed.
+ */
+export function notifyPartner(coupleId: string, kind: PushKind): void {
+  try {
+    void getClient()
+      .functions.invoke('send-push', {
+        body: { couple_id: coupleId, type: kind },
+      })
+      .catch(() => {});
+  } catch {
+    // not configured — nothing to do
   }
 }

@@ -1,68 +1,84 @@
 /**
- * The hot little status doc each member keeps: heartbeat (presence),
- * weather of the heart, and the last spark. One doc per person so the
- * partner can watch it with a single listener.
+ * The `statuses` row each member keeps: weather of the heart, plus the Web
+ * Push subscription the send-push Edge Function delivers to. Presence and
+ * sparks are NOT here — they're ephemeral, and live on the realtime channel
+ * (see realtime.ts).
  */
-import {
-  doc,
-  onSnapshot,
-  serverTimestamp,
-  setDoc,
-} from 'firebase/firestore';
-import { getDb } from './firebase';
+import { onAppActive } from './lifecycle';
+import { getClient, onCoupleTableChange } from './supabase';
 import type { MemberStatus, Weather } from './types';
 
-/** Partner counts as "here now" if their heartbeat is younger than this. */
-export const PRESENCE_WINDOW_MS = 45_000;
-/** How often we refresh our own heartbeat while the app is foregrounded. */
-export const HEARTBEAT_INTERVAL_MS = 25_000;
+export type StatusMap = Record<string, MemberStatus>;
 
-function statusRef(coupleId: string, uid: string) {
-  return doc(getDb(), 'couples', coupleId, 'status', uid);
+interface StatusRow {
+  uid: string;
+  weather: Weather | null;
+  weather_at: string | null;
 }
 
-export function beatHeart(coupleId: string, uid: string): Promise<void> {
-  return setDoc(
-    statusRef(coupleId, uid),
-    { lastActiveAt: serverTimestamp() },
-    { merge: true },
-  );
+async function fetchStatuses(coupleId: string): Promise<StatusMap> {
+  const { data } = await getClient()
+    .from('statuses')
+    .select('uid, weather, weather_at')
+    .eq('couple_id', coupleId);
+  const map: StatusMap = {};
+  for (const row of (data ?? []) as StatusRow[]) {
+    map[row.uid] = {
+      weather: row.weather ?? undefined,
+      weatherAt: row.weather_at ?? undefined,
+    };
+  }
+  return map;
 }
 
-export function setWeather(
+/** Both members' statuses, live. */
+export function subscribeStatuses(
+  coupleId: string,
+  onChange: (statuses: StatusMap) => void,
+): () => void {
+  let cancelled = false;
+  const refetch = () => {
+    fetchStatuses(coupleId)
+      .then((map) => {
+        if (!cancelled) onChange(map);
+      })
+      .catch(() => {});
+  };
+  refetch();
+  const offEvents = onCoupleTableChange('statuses', 'statuses', coupleId, refetch);
+  const offActive = onAppActive(refetch);
+  return () => {
+    cancelled = true;
+    offEvents();
+    offActive();
+  };
+}
+
+export async function setWeather(
   coupleId: string,
   uid: string,
   weather: Weather,
 ): Promise<void> {
-  return setDoc(
-    statusRef(coupleId, uid),
-    { weather, weatherAt: serverTimestamp() },
-    { merge: true },
+  const { error } = await getClient().from('statuses').upsert(
+    {
+      couple_id: coupleId,
+      uid,
+      weather,
+      weather_at: new Date().toISOString(),
+    },
+    { onConflict: 'couple_id,uid' },
   );
+  if (error) throw new Error(error.message);
 }
 
-export function sendSpark(coupleId: string, uid: string): Promise<void> {
-  return setDoc(
-    statusRef(coupleId, uid),
-    { sparkAt: serverTimestamp() },
-    { merge: true },
-  );
-}
-
-export function savePushToken(
+export async function savePushSubscription(
   coupleId: string,
   uid: string,
-  pushToken: string,
+  subscription: unknown | null,
 ): Promise<void> {
-  return setDoc(statusRef(coupleId, uid), { pushToken }, { merge: true });
-}
-
-export function subscribeStatus(
-  coupleId: string,
-  uid: string,
-  onChange: (status: MemberStatus | null) => void,
-): () => void {
-  return onSnapshot(statusRef(coupleId, uid), (snap) => {
-    onChange(snap.exists() ? (snap.data() as MemberStatus) : null);
-  });
+  const { error } = await getClient().from('statuses').upsert(
+    { couple_id: coupleId, uid, push_subscription: subscription },
+    { onConflict: 'couple_id,uid' },
+  );
+  if (error) throw new Error(error.message);
 }

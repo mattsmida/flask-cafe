@@ -24,21 +24,40 @@ const THUMB = 28;
 export function CheckinSlider({ label, lowHint, highHint, value, onChange }: Props) {
   const [trackWidth, setTrackWidth] = useState(0);
   const trackWidthRef = useRef(0);
+  const trackLeftRef = useRef(0);
+  const trackRef = useRef<View>(null);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
-  const setFromEvent = (evt: GestureResponderEvent) => {
+  // Position math uses pageX against the track's measured window position:
+  // works for touch AND mouse (locationX is unreliable on react-native-web,
+  // where the event target can be a child of the track).
+  const setFromPageX = (pageX: number) => {
     const w = trackWidthRef.current;
     if (w <= 0) return;
-    const x = evt.nativeEvent.locationX;
+    const x = pageX - trackLeftRef.current;
     const next = Math.round(Math.min(100, Math.max(0, (x / w) * 100)));
-    onChange(next);
+    onChangeRef.current(next);
   };
 
   const pan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: setFromEvent,
-      onPanResponderMove: setFromEvent,
+      // The surrounding ScrollView must not steal a drag mid-slide.
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: (evt: GestureResponderEvent) => {
+        const pageX = evt.nativeEvent.pageX;
+        // Re-measure on every grant: the screen may have scrolled since layout.
+        trackRef.current?.measureInWindow((x, _y, width) => {
+          trackLeftRef.current = x;
+          if (width > 0) trackWidthRef.current = width;
+          setFromPageX(pageX);
+        });
+      },
+      onPanResponderMove: (evt: GestureResponderEvent) => {
+        setFromPageX(evt.nativeEvent.pageX);
+      },
     }),
   ).current;
 
@@ -51,6 +70,7 @@ export function CheckinSlider({ label, lowHint, highHint, value, onChange }: Pro
         <Text style={styles.value}>{value}</Text>
       </View>
       <View
+        ref={trackRef}
         style={styles.track}
         onLayout={(e) => {
           setTrackWidth(e.nativeEvent.layout.width);

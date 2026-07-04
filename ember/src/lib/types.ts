@@ -1,25 +1,20 @@
-import type { Timestamp } from 'firebase/firestore';
-
 export type Weather = 'sunny' | 'cloudy' | 'stormy';
 
+/** Assembled from the couples + members tables. */
 export interface Couple {
+  id: string;
   code: string;
-  members: string[]; // uids, max 2
+  members: string[]; // uids, max 2, in join order
   names: Record<string, string>; // uid -> display name
-  createdAt: Timestamp;
 }
 
-/** One per member, at couples/{id}/status/{uid}. Small and hot: heartbeats, weather, sparks. */
+/** One row per member in `statuses`: the weather of the heart. */
 export interface MemberStatus {
-  name: string;
-  lastActiveAt?: Timestamp;
   weather?: Weather;
-  weatherAt?: Timestamp;
-  sparkAt?: Timestamp;
-  pushToken?: string;
+  weatherAt?: string; // ISO timestamp
 }
 
-/** At couples/{id}/checkins/{date}_{uid}. Sliders are 0–100. */
+/** One row per (member, local day) in `checkins`. Sliders are 0–100. */
 export interface Checkin {
   uid: string;
   date: string; // YYYY-MM-DD
@@ -27,25 +22,31 @@ export interface Checkin {
   heart: number;
   connection: number;
   word: string;
-  at: Timestamp;
+  at: string;
 }
 
-/** At couples/{id}/answers/{date}_{uid}. Revealed in the UI only once both exist. */
+/** One row per (member, day) in `answers`. The server reveals the partner's
+ * row only once your own answer for that day exists. */
 export interface Answer {
   uid: string;
   date: string;
   text: string;
-  at: Timestamp;
+  at: string;
 }
 
-/** At couples/{id}/letters/{month}_{uid}. Hidden from everyone until unlockAt. */
+/**
+ * A vault entry. Sealed letters come from the letter_vault view as metadata
+ * only; prompt/text are present exactly when the server has unlocked the
+ * letter (unlock_at has passed).
+ */
 export interface Letter {
   uid: string;
   month: string; // YYYY-MM
-  prompt: string;
-  text: string;
-  writtenAt: Timestamp;
-  unlockAt: Timestamp;
+  writtenAt: string;
+  unlockAt: string;
+  unlocked: boolean;
+  prompt?: string;
+  text?: string;
 }
 
 export interface Session {

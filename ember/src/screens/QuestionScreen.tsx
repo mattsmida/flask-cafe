@@ -12,6 +12,7 @@ import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { partnerUid } from '../lib/couple';
 import { todayKey } from '../lib/dates';
+import { notifyPartner } from '../lib/push';
 import { questionForDate, submitAnswer, subscribeAnswers } from '../lib/questions';
 import type { Answer, Session } from '../lib/types';
 import { colors, radius, spacing, type } from '../theme';
@@ -45,6 +46,7 @@ export function QuestionScreen({ session }: Props) {
     setBusy(true);
     try {
       await submitAnswer(coupleId, uid, today, draft.trim());
+      notifyPartner(coupleId, 'answer');
       setDraft('');
     } finally {
       setBusy(false);

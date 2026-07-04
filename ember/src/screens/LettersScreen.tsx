@@ -34,8 +34,11 @@ export function LettersScreen({ session }: Props) {
   const [letters, setLetters] = useState<Letter[]>([]);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
+  // Sealed letters are RLS-hidden, so writing one produces no realtime
+  // event (not even for its author) — bump to re-subscribe, which refetches.
+  const [refresh, setRefresh] = useState(0);
 
-  useEffect(() => subscribeLetters(coupleId, setLetters), [coupleId]);
+  useEffect(() => subscribeLetters(coupleId, setLetters), [coupleId, refresh]);
 
   const mineThisMonth = letters.find((l) => l.uid === uid && l.month === thisMonth);
   const partnerName = (pUid && couple.names[pUid]) || 'Them';
@@ -46,6 +49,7 @@ export function LettersScreen({ session }: Props) {
     try {
       await writeLetter(coupleId, uid, draft.trim());
       setDraft('');
+      setRefresh((r) => r + 1);
     } finally {
       setBusy(false);
     }

@@ -1,9 +1,11 @@
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { loadSession, subscribeCouple } from './src/lib/couple';
-import { isFirebaseConfigured } from './src/lib/firebase';
+import { loadSession, partnerUid, subscribeCouple } from './src/lib/couple';
+import { registerServiceWorker } from './src/lib/push';
+import { joinCoupleChannel, type CoupleChannel } from './src/lib/realtime';
+import { isSupabaseConfigured } from './src/lib/supabase';
 import type { Session } from './src/lib/types';
 import { CheckinScreen } from './src/screens/CheckinScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
@@ -25,10 +27,17 @@ const TABS: { key: Tab; icon: string; label: string }[] = [
 ];
 
 export default function App() {
-  const configured = isFirebaseConfigured();
+  const configured = isSupabaseConfigured();
   const [booting, setBooting] = useState(configured);
   const [session, setSession] = useState<Session | null>(null);
   const [tab, setTab] = useState<Tab>('today');
+  const [presentUids, setPresentUids] = useState<string[]>([]);
+  const [sparkPulse, setSparkPulse] = useState(0);
+  const channelRef = useRef<CoupleChannel | null>(null);
+
+  useEffect(() => {
+    void registerServiceWorker();
+  }, []);
 
   useEffect(() => {
     if (!configured) return;
@@ -40,12 +49,32 @@ export default function App() {
 
   // Keep couple metadata live (partner joining, names changing).
   const coupleId = session?.coupleId;
+  const uid = session?.uid;
   useEffect(() => {
     if (!coupleId) return;
     return subscribeCouple(coupleId, (couple) => {
       setSession((prev) => (prev ? { ...prev, couple } : prev));
     });
   }, [coupleId]);
+
+  // The couple's live channel — presence and sparks — is app-level, so
+  // "here right now" means "in the app", not "on the Today tab".
+  useEffect(() => {
+    if (!coupleId || !uid) return;
+    const channel = joinCoupleChannel(coupleId, uid, {
+      onPresence: setPresentUids,
+      onSpark: () => setSparkPulse((p) => p + 1),
+    });
+    channelRef.current = channel;
+    return () => {
+      channelRef.current = null;
+      setPresentUids([]);
+      channel.close();
+    };
+  }, [coupleId, uid]);
+
+  const pUid = session ? partnerUid(session) : null;
+  const partnerHere = !!pUid && presentUids.includes(pUid);
 
   let body: React.ReactNode;
   if (!configured) {
@@ -62,7 +91,14 @@ export default function App() {
     body = (
       <View style={styles.appWrap}>
         <View style={styles.screenWrap}>
-          {tab === 'today' && <HomeScreen session={session} />}
+          {tab === 'today' && (
+            <HomeScreen
+              session={session}
+              partnerHere={partnerHere}
+              sparkPulse={sparkPulse}
+              onSendSpark={() => channelRef.current?.sendSpark()}
+            />
+          )}
           {tab === 'checkin' && <CheckinScreen session={session} />}
           {tab === 'question' && <QuestionScreen session={session} />}
           {tab === 'letters' && <LettersScreen session={session} />}
@@ -98,7 +134,9 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        {body}
+        {/* On a desktop browser the app lives in a centered column instead
+            of stretching across the window. */}
+        <View style={styles.frame}>{body}</View>
         <StatusBar style="light" />
       </SafeAreaView>
     </SafeAreaProvider>
@@ -107,6 +145,12 @@ export default function App() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
+  frame: {
+    flex: 1,
+    width: '100%',
+    maxWidth: 560,
+    alignSelf: 'center',
+  },
   center: {
     flex: 1,
     backgroundColor: colors.bg,

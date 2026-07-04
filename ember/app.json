@@ -25,7 +25,13 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "output": "single",
+      "name": "Ember",
+      "shortName": "Ember",
+      "description": "A small warm place for two people across a distance.",
+      "backgroundColor": "#171210",
+      "themeColor": "#171210"
     }
   }
 }
