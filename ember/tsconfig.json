@@ -1,0 +1,13 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "scripts",
+    // Deno code (Supabase Edge Function) — not part of the app build.
+    "supabase/functions"
+  ]
+}
