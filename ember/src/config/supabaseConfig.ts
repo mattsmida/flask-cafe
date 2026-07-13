@@ -10,9 +10,9 @@
  * in place the app shows a setup screen instead of crashing.
  */
 export const supabaseConfig = {
-  url: 'PASTE_ME', // e.g. https://abcdefgh.supabase.co
-  anonKey: 'PASTE_ME',
-  vapidPublicKey: 'PASTE_ME', // push stays off until this is set
+  url: 'https://yhzuzohdpbtghcwwpljj.supabase.co', // e.g. https://abcdefgh.supabase.co
+  anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InloenV6b2hkcGJ0Z2hjd3dwbGpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMxNzczOTMsImV4cCI6MjA5ODc1MzM5M30.5YceYE87JnHJX5uKt85UHd8IcDmNR7wzllXHeojqWnc',
+  vapidPublicKey: 'BNxPYG19XQYOkLkMwdImXdxBu8jg_Naefm9ErrCV3CHV5GB-hMgYAivTJl1kc5p2bHsVyN06co7SBIAStifYc9o', // push stays off until this is set
 };
 
 export const isSupabaseConfigured = () =>
@@ -20,4 +20,4 @@ export const isSupabaseConfigured = () =>
   !supabaseConfig.anonKey.includes('PASTE_ME');
 
 export const isPushConfigured = () =>
-  isSupabaseConfigured() && !supabaseConfig.vapidPublicKey.includes('PASTE_ME');
+isSupabaseConfigured() && !supabaseConfig.vapidPublicKey.includes('PASTE_ME');
