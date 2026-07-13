@@ -71,16 +71,20 @@ Standard Web Push with VAPID — no Firebase, no FCM.
 
 ### 3. Host the web app (free tier)
 
-The app is a static site. With [Cloudflare Pages](https://pages.cloudflare.com):
+The app is a static site, hosted on Cloudflare (free, no card required).
+`wrangler.jsonc` in this folder already describes it as a static-assets
+Worker, so the dashboard flow is:
 
-1. Push this repo to GitHub and create a Pages project from it, or use
-   `npx wrangler pages deploy dist` for direct uploads.
-2. Build settings:
+1. [dash.cloudflare.com](https://dash.cloudflare.com) → **Compute →
+   Workers & Pages → Create** → import `mattsmida/flask-cafe` from GitHub.
+2. Settings in the setup form:
+   - **Project name:** `ember`
    - **Build command:** `npm run build:web`
-   - **Build output directory:** `dist`
-   - **Root directory:** `ember`
-3. Every push to the repo redeploys. (Netlify works identically —
-   same command, same `dist` folder.)
+   - **Deploy command:** `npx wrangler deploy`
+   - **Advanced → Path:** `/ember`
+3. Every push to `main` redeploys. (The classic Cloudflare *Pages* flow —
+   root dir `ember`, build `npm run build:web`, output `dist` — also still
+   works if your dashboard offers it, as does Netlify.)
 
 > The site must be served over **https** for installation and push to work
 > (any Pages/Netlify domain is).
