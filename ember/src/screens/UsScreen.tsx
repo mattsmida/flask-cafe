@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
-import { leaveLocally, partnerUid } from '../lib/couple';
+import { fetchMyDeviceCode, leaveLocally, partnerPersonId, rotateDeviceCode } from '../lib/couple';
 import { confirmAsync, shareInvite } from '../lib/platform';
 import {
   enablePush,
@@ -31,8 +31,8 @@ const PUSH_EXPLANATIONS: Record<Exclude<PushAvailability, 'ready'>, string> = {
 };
 
 export function UsScreen({ session, onLeft }: Props) {
-  const { uid, coupleId, couple } = session;
-  const pUid = partnerUid(session);
+  const { personId, couple } = session;
+  const pId = partnerPersonId(session);
 
   // Synchronous first guess so the card never flashes the wrong state; the
   // effect only upgrades 'ready' → 'enabled' once the subscription is found.
@@ -40,6 +40,10 @@ export function UsScreen({ session, onLeft }: Props) {
   const [pushBusy, setPushBusy] = useState(false);
   const [pushError, setPushError] = useState<string | null>(null);
   const [shared, setShared] = useState<'copied' | null>(null);
+
+  const [deviceCode, setDeviceCode] = useState<string | null>(null);
+  const [deviceCodeBusy, setDeviceCodeBusy] = useState(false);
+  const [deviceCodeShared, setDeviceCodeShared] = useState<'copied' | null>(null);
 
   useEffect(() => {
     if (getPushAvailability() === 'ready') {
@@ -49,11 +53,15 @@ export function UsScreen({ session, onLeft }: Props) {
     }
   }, []);
 
+  useEffect(() => {
+    fetchMyDeviceCode().then(setDeviceCode).catch(() => {});
+  }, [personId]);
+
   const onEnablePush = async () => {
     setPushBusy(true);
     setPushError(null);
     try {
-      await enablePush(coupleId, uid);
+      await enablePush();
       setAvailability('enabled');
     } catch (e) {
       setPushError(e instanceof Error ? e.message : 'Could not enable notifications.');
@@ -68,6 +76,32 @@ export function UsScreen({ session, onLeft }: Props) {
     if (outcome === 'copied') {
       setShared('copied');
       setTimeout(() => setShared(null), 2500);
+    }
+  };
+
+  const shareDeviceCode = async () => {
+    if (!deviceCode) return;
+    const outcome = await shareInvite(deviceCode);
+    if (outcome === 'copied') {
+      setDeviceCodeShared('copied');
+      setTimeout(() => setDeviceCodeShared(null), 2500);
+    }
+  };
+
+  const onRotateDeviceCode = async () => {
+    const yes = await confirmAsync(
+      'Get a new device code?',
+      'Your old code stops working. Any device you haven’t linked yet will need the new one.',
+      'Get new code',
+    );
+    if (!yes) return;
+    setDeviceCodeBusy(true);
+    try {
+      setDeviceCode(await rotateDeviceCode());
+    } catch {
+      // leave the old code showing
+    } finally {
+      setDeviceCodeBusy(false);
     }
   };
 
@@ -90,12 +124,12 @@ export function UsScreen({ session, onLeft }: Props) {
       <Card title="This space">
         <View style={styles.memberRow}>
           <Text style={styles.memberDotSelf}>●</Text>
-          <Text style={type.body}>{couple.names[uid] ?? 'You'} (you)</Text>
+          <Text style={type.body}>{couple.names[personId] ?? 'You'} (you)</Text>
         </View>
         <View style={styles.memberRow}>
           <Text style={styles.memberDotPartner}>●</Text>
           <Text style={type.body}>
-            {pUid ? couple.names[pUid] : 'Waiting for your person…'}
+            {pId ? couple.names[pId] : 'Waiting for your person…'}
           </Text>
         </View>
       </Card>
@@ -114,14 +148,42 @@ export function UsScreen({ session, onLeft }: Props) {
         {pushError && <Text style={styles.pushError}>{pushError}</Text>}
       </Card>
 
+      <Card title="Your device code">
+        <Text style={[type.dim, styles.cardLede]}>
+          Using Ember on your phone and your desktop? Open this app on the
+          other device and enter this code there — it links as another
+          device for you, not a new person. Keep it private: anyone with it
+          can add a device as you.
+        </Text>
+        {deviceCode ? (
+          <Pressable onPress={shareDeviceCode} style={styles.codeBox}>
+            <Text style={styles.code}>{deviceCode}</Text>
+            <Text style={type.small}>
+              {deviceCodeShared === 'copied' ? 'copied!' : 'tap to share'}
+            </Text>
+          </Pressable>
+        ) : (
+          <Text style={type.dim}>Loading…</Text>
+        )}
+        <View style={styles.rotateRow}>
+          <Button
+            label="Get a new code"
+            variant="ghost"
+            onPress={onRotateDeviceCode}
+            busy={deviceCodeBusy}
+          />
+        </View>
+      </Card>
+
       <Card title="Invite code">
         <Pressable onPress={shareCode} style={styles.codeBox}>
           <Text style={styles.code}>{couple.code}</Text>
           <Text style={type.small}>{shared === 'copied' ? 'copied!' : 'tap to share'}</Text>
         </Pressable>
         <Text style={[type.small, styles.codeHint]}>
-          Keep this handy — it’s also how you rejoin if you ever sign out or
-          switch devices.
+          This is for your person to join the space for the first time. If
+          you’re adding another one of your own devices, use your device
+          code above instead.
         </Text>
       </Card>
 
@@ -151,6 +213,7 @@ const styles = StyleSheet.create({
   memberDotPartner: { color: colors.violet, fontSize: 14 },
   pushLede: { marginBottom: spacing.md },
   pushError: { color: colors.danger, marginTop: spacing.sm, fontSize: 14 },
+  cardLede: { marginBottom: spacing.md },
   codeBox: {
     alignItems: 'center',
     backgroundColor: colors.cardRaised,
@@ -159,4 +222,5 @@ const styles = StyleSheet.create({
   },
   code: { color: colors.ember, fontSize: 30, fontWeight: '800', letterSpacing: 8 },
   codeHint: { marginTop: spacing.sm },
+  rotateRow: { marginTop: spacing.md },
 });

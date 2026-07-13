@@ -2,6 +2,12 @@
  * The couple's live channel: presence (is my person in the app right now?)
  * and sparks (a broadcast "thinking of you" — ephemeral, nothing stored).
  * One channel per couple, joined for as long as a session is on screen.
+ *
+ * Presence and broadcasts are keyed by PERSON id, not device id — if
+ * someone has Ember open on both their phone and their desktop, Realtime
+ * Presence naturally coalesces multiple devices tracking under the same
+ * key into one "this person is here" entry, and a spark they send from one
+ * device correctly doesn't also flare on their own other device.
  */
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { AppState } from 'react-native';
@@ -16,15 +22,15 @@ export interface CoupleChannel {
 
 export function joinCoupleChannel(
   coupleId: string,
-  uid: string,
+  personId: string,
   handlers: {
-    onPresence: (presentUids: string[]) => void;
+    onPresence: (presentPersonIds: string[]) => void;
     onSpark: () => void;
   },
 ): CoupleChannel {
   const supabase = getClient();
   const channel: RealtimeChannel = supabase.channel(`couple:${coupleId}`, {
-    config: { presence: { key: uid }, broadcast: { self: false } },
+    config: { presence: { key: personId }, broadcast: { self: false } },
   });
 
   const track = () => {
@@ -37,7 +43,7 @@ export function joinCoupleChannel(
     })
     .on('broadcast', { event: 'spark' }, (msg) => {
       const from = (msg.payload as { from?: string } | undefined)?.from;
-      if (from !== uid) handlers.onSpark();
+      if (from !== personId) handlers.onSpark();
     })
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') track();
@@ -55,7 +61,7 @@ export function joinCoupleChannel(
       void channel.send({
         type: 'broadcast',
         event: 'spark',
-        payload: { from: uid },
+        payload: { from: personId },
       });
     },
     close: () => {

@@ -1,8 +1,9 @@
 /**
  * The blind daily question. Both devices derive the same question from the
- * date + couple id; each answer is stored separately. The reveal is enforced
- * by the server: the answers RLS policy hides your partner's row until your
- * own answer for that date exists.
+ * date + couple id; each answer is stored separately per PERSON (not
+ * device — either of your devices can answer, and either sees the reveal).
+ * The reveal is enforced by the server: the answers RLS policy hides your
+ * partner's row until your own answer for that date exists.
  */
 import { stableHash } from './dates';
 import { onAppActive } from './lifecycle';
@@ -16,17 +17,28 @@ export function questionForDate(coupleId: string, date: string): string {
 
 export async function submitAnswer(
   coupleId: string,
-  uid: string,
+  personId: string,
   date: string,
   text: string,
 ): Promise<void> {
   const { error } = await getClient().from('answers').insert({
     couple_id: coupleId,
-    uid,
+    person_id: personId,
     date,
     text,
   });
   if (error) throw new Error(error.message);
+}
+
+interface AnswerRow {
+  person_id: string;
+  date: string;
+  text: string;
+  at: string;
+}
+
+function toAnswer(row: AnswerRow): Answer {
+  return { personId: row.person_id, date: row.date, text: row.text, at: row.at };
 }
 
 /**
@@ -44,10 +56,10 @@ export function subscribeAnswers(
     try {
       const { data } = await getClient()
         .from('answers')
-        .select('uid, date, text, at')
+        .select('person_id, date, text, at')
         .eq('couple_id', coupleId)
         .eq('date', date);
-      if (!cancelled) onChange((data ?? []) as Answer[]);
+      if (!cancelled) onChange(((data ?? []) as AnswerRow[]).map(toAnswer));
     } catch {
       // keep last known state
     }

@@ -12,22 +12,45 @@ export interface CheckinDraft {
   word: string;
 }
 
-/** One check-in per person per local day; re-saving the same day overwrites. */
+interface CheckinRow {
+  person_id: string;
+  date: string;
+  energy: number;
+  heart: number;
+  connection: number;
+  word: string;
+  at: string;
+}
+
+function toCheckin(row: CheckinRow): Checkin {
+  return {
+    personId: row.person_id,
+    date: row.date,
+    energy: row.energy,
+    heart: row.heart,
+    connection: row.connection,
+    word: row.word,
+    at: row.at,
+  };
+}
+
+/** One check-in per person per local day (any of their devices can write
+ * it); re-saving the same day overwrites. */
 export async function saveCheckin(
   coupleId: string,
-  uid: string,
+  personId: string,
   date: string,
   draft: CheckinDraft,
 ): Promise<void> {
   const { error } = await getClient().from('checkins').upsert(
     {
       couple_id: coupleId,
-      uid,
+      person_id: personId,
       date,
       ...draft,
       at: new Date().toISOString(),
     },
-    { onConflict: 'couple_id,uid,date' },
+    { onConflict: 'couple_id,person_id,date' },
   );
   if (error) throw new Error(error.message);
 }
@@ -43,11 +66,11 @@ export function subscribeRecentCheckins(
       const start = daysAgoKey(HISTORY_DAYS - 1);
       const { data } = await getClient()
         .from('checkins')
-        .select('uid, date, energy, heart, connection, word, at')
+        .select('person_id, date, energy, heart, connection, word, at')
         .eq('couple_id', coupleId)
         .gte('date', start)
         .order('date');
-      if (!cancelled) onChange((data ?? []) as Checkin[]);
+      if (!cancelled) onChange(((data ?? []) as CheckinRow[]).map(toCheckin));
     } catch {
       // keep whatever we showed last
     }

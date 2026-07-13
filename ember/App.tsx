@@ -2,7 +2,7 @@ import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { loadSession, partnerUid, subscribeCouple } from './src/lib/couple';
+import { loadSession, partnerPersonId, subscribeCouple } from './src/lib/couple';
 import { registerServiceWorker } from './src/lib/push';
 import { joinCoupleChannel, type CoupleChannel } from './src/lib/realtime';
 import { isSupabaseConfigured } from './src/lib/supabase';
@@ -31,7 +31,7 @@ export default function App() {
   const [booting, setBooting] = useState(configured);
   const [session, setSession] = useState<Session | null>(null);
   const [tab, setTab] = useState<Tab>('today');
-  const [presentUids, setPresentUids] = useState<string[]>([]);
+  const [presentPersonIds, setPresentPersonIds] = useState<string[]>([]);
   const [sparkPulse, setSparkPulse] = useState(0);
   const channelRef = useRef<CoupleChannel | null>(null);
 
@@ -49,7 +49,7 @@ export default function App() {
 
   // Keep couple metadata live (partner joining, names changing).
   const coupleId = session?.coupleId;
-  const uid = session?.uid;
+  const personId = session?.personId;
   useEffect(() => {
     if (!coupleId) return;
     return subscribeCouple(coupleId, (couple) => {
@@ -58,23 +58,25 @@ export default function App() {
   }, [coupleId]);
 
   // The couple's live channel — presence and sparks — is app-level, so
-  // "here right now" means "in the app", not "on the Today tab".
+  // "here right now" means "in the app", not "on the Today tab". Keyed by
+  // person, not device: if the partner has Ember open on two devices, this
+  // still reads as one "they're here."
   useEffect(() => {
-    if (!coupleId || !uid) return;
-    const channel = joinCoupleChannel(coupleId, uid, {
-      onPresence: setPresentUids,
+    if (!coupleId || !personId) return;
+    const channel = joinCoupleChannel(coupleId, personId, {
+      onPresence: setPresentPersonIds,
       onSpark: () => setSparkPulse((p) => p + 1),
     });
     channelRef.current = channel;
     return () => {
       channelRef.current = null;
-      setPresentUids([]);
+      setPresentPersonIds([]);
       channel.close();
     };
-  }, [coupleId, uid]);
+  }, [coupleId, personId]);
 
-  const pUid = session ? partnerUid(session) : null;
-  const partnerHere = !!pUid && presentUids.includes(pUid);
+  const partnerId = session ? partnerPersonId(session) : null;
+  const partnerHere = !!partnerId && presentPersonIds.includes(partnerId);
 
   let body: React.ReactNode;
   if (!configured) {

@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
-import { partnerUid } from '../lib/couple';
+import { partnerPersonId } from '../lib/couple';
 import { todayKey } from '../lib/dates';
 import { notifyPartner } from '../lib/push';
 import { questionForDate, submitAnswer, subscribeAnswers } from '../lib/questions';
@@ -22,8 +22,8 @@ interface Props {
 }
 
 export function QuestionScreen({ session }: Props) {
-  const { uid, coupleId, couple } = session;
-  const pUid = partnerUid(session);
+  const { personId, coupleId, couple } = session;
+  const pId = partnerPersonId(session);
   const today = todayKey();
   const question = questionForDate(coupleId, today);
 
@@ -36,16 +36,16 @@ export function QuestionScreen({ session }: Props) {
     [coupleId, today],
   );
 
-  const mine = answers.find((a) => a.uid === uid);
-  const theirs = answers.find((a) => a.uid !== uid);
-  const partnerName = (pUid && couple.names[pUid]) || 'Them';
+  const mine = answers.find((a) => a.personId === personId);
+  const theirs = answers.find((a) => a.personId !== personId);
+  const partnerName = (pId && couple.names[pId]) || 'Them';
   const bothIn = !!mine && !!theirs;
 
   const send = async () => {
     if (!draft.trim()) return;
     setBusy(true);
     try {
-      await submitAnswer(coupleId, uid, today, draft.trim());
+      await submitAnswer(coupleId, personId, today, draft.trim());
       notifyPartner(coupleId, 'answer');
       setDraft('');
     } finally {

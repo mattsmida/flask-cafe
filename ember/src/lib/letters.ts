@@ -1,11 +1,11 @@
 /**
- * The Future Question: once a month each partner writes to your future
+ * The Future Question: once a month each person writes to your future
  * selves; letters unseal three months after they're written.
  *
  * Sealing is enforced by the server: the letters SELECT policy returns a
  * row only once unlock_at has passed (not even the author can read it
- * early), while the letter_vault view lists sealed letters' metadata so the
- * vault can show countdowns.
+ * early, from any of their devices), while the letter_vault view lists
+ * sealed letters' metadata so the vault can show countdowns.
  */
 import { monthKey } from './dates';
 import { onAppActive } from './lifecycle';
@@ -23,7 +23,7 @@ export function promptForMonth(month: string = monthKey()): string {
 
 export async function writeLetter(
   coupleId: string,
-  uid: string,
+  personId: string,
   text: string,
 ): Promise<void> {
   const month = monthKey();
@@ -32,7 +32,7 @@ export async function writeLetter(
   ).toISOString();
   const { error } = await getClient().from('letters').insert({
     couple_id: coupleId,
-    uid,
+    person_id: personId,
     month,
     prompt: promptForMonth(month),
     text,
@@ -42,7 +42,7 @@ export async function writeLetter(
 }
 
 interface VaultRow {
-  uid: string;
+  person_id: string;
   month: string;
   written_at: string;
   unlock_at: string;
@@ -60,21 +60,21 @@ async function fetchLetters(coupleId: string): Promise<Letter[]> {
   const [vaultRes, openRes] = await Promise.all([
     supabase
       .from('letter_vault')
-      .select('uid, month, written_at, unlock_at')
+      .select('person_id, month, written_at, unlock_at')
       .eq('couple_id', coupleId)
       .order('month', { ascending: false }),
     supabase
       .from('letters')
-      .select('uid, month, prompt, text, written_at, unlock_at')
+      .select('person_id, month, prompt, text, written_at, unlock_at')
       .eq('couple_id', coupleId),
   ]);
   const open = new Map(
-    ((openRes.data ?? []) as LetterRow[]).map((l) => [`${l.month}_${l.uid}`, l]),
+    ((openRes.data ?? []) as LetterRow[]).map((l) => [`${l.month}_${l.person_id}`, l]),
   );
   return ((vaultRes.data ?? []) as VaultRow[]).map((v) => {
-    const full = open.get(`${v.month}_${v.uid}`);
+    const full = open.get(`${v.month}_${v.person_id}`);
     return {
-      uid: v.uid,
+      personId: v.person_id,
       month: v.month,
       writtenAt: v.written_at,
       unlockAt: v.unlock_at,
