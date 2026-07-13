@@ -4,7 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../components/Card';
 import { GlowOrb } from '../components/GlowOrb';
 import { WEATHER_META, WeatherPicker } from '../components/WeatherPicker';
-import { partnerUid } from '../lib/couple';
+import { partnerPersonId } from '../lib/couple';
 import { shareInvite } from '../lib/platform';
 import { notifyPartner } from '../lib/push';
 import { setWeather, subscribeStatuses, type StatusMap } from '../lib/status';
@@ -21,9 +21,9 @@ interface Props {
 }
 
 export function HomeScreen({ session, partnerHere, sparkPulse, onSendSpark }: Props) {
-  const { uid, coupleId, couple } = session;
-  const pUid = partnerUid(session);
-  const partnerName = pUid ? couple.names[pUid] ?? 'Your person' : null;
+  const { personId, coupleId, couple } = session;
+  const pId = partnerPersonId(session);
+  const partnerName = pId ? couple.names[pId] ?? 'Your person' : null;
 
   const [statuses, setStatuses] = useState<StatusMap>({});
   const [shared, setShared] = useState<'copied' | null>(null);
@@ -39,8 +39,8 @@ export function HomeScreen({ session, partnerHere, sparkPulse, onSendSpark }: Pr
     }
   }, [sparkPulse]);
 
-  const myStatus = statuses[uid];
-  const partnerStatus = pUid ? statuses[pUid] : undefined;
+  const myStatus = statuses[personId];
+  const partnerStatus = pId ? statuses[pId] : undefined;
 
   const onSpark = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
@@ -49,7 +49,7 @@ export function HomeScreen({ session, partnerHere, sparkPulse, onSendSpark }: Pr
   };
 
   const onWeather = (w: Weather) => {
-    setWeather(coupleId, uid, w).catch(() => {});
+    setWeather(coupleId, personId, w).catch(() => {});
   };
 
   const shareCode = async () => {
@@ -64,7 +64,7 @@ export function HomeScreen({ session, partnerHere, sparkPulse, onSendSpark }: Pr
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <Text style={type.title}>Today</Text>
 
-      {!pUid ? (
+      {!pId ? (
         <Card title="Waiting for your person">
           <Text style={[type.dim, styles.inviteText]}>
             Send them this code — when they join, this screen comes alive.

@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
-import { createCouple, joinCouple } from '../lib/couple';
+import { createCouple, joinCouple, linkDevice } from '../lib/couple';
 import type { Session } from '../lib/types';
 import { colors, radius, spacing, type } from '../theme';
 
@@ -17,10 +17,13 @@ interface Props {
   onSession: (session: Session) => void;
 }
 
+type Busy = 'create' | 'join' | 'link' | null;
+
 export function WelcomeScreen({ onSession }: Props) {
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
-  const [busy, setBusy] = useState<'create' | 'join' | null>(null);
+  const [deviceCode, setDeviceCode] = useState('');
+  const [busy, setBusy] = useState<Busy>(null);
   const [error, setError] = useState<string | null>(null);
 
   const run = async (kind: 'create' | 'join') => {
@@ -43,6 +46,18 @@ export function WelcomeScreen({ onSession }: Props) {
     }
   };
 
+  const runLink = async () => {
+    setError(null);
+    setBusy('link');
+    try {
+      onSession(await linkDevice(deviceCode));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong. Try again.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.screen}
@@ -54,6 +69,30 @@ export function WelcomeScreen({ onSession }: Props) {
         <Text style={[type.dim, styles.lede]}>
           A small warm place for the two of you, across any distance.
         </Text>
+
+        <Card title="Already using Ember on another device?">
+          <Text style={[type.dim, styles.cardText]}>
+            Find your device code on the Us tab of your other device (phone or
+            desktop), then enter it here — this becomes another device for
+            the same you, not a new person.
+          </Text>
+          <TextInput
+            style={[styles.input, styles.codeInput]}
+            placeholder="ABC123"
+            placeholderTextColor={colors.muted}
+            value={deviceCode}
+            onChangeText={(t) => setDeviceCode(t.toUpperCase())}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            maxLength={6}
+          />
+          <Button
+            label="Link this device"
+            onPress={runLink}
+            busy={busy === 'link'}
+            disabled={busy !== null || deviceCode.trim().length < 6}
+          />
+        </Card>
 
         <Card title="Who are you?">
           <TextInput

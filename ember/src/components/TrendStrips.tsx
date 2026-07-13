@@ -27,12 +27,12 @@ const BAR_MAX = 30;
 
 interface Props {
   checkins: Checkin[];
-  selfUid: string;
+  selfPersonId: string;
   selfName: string;
   partnerName: string;
 }
 
-export function TrendStrips({ checkins, selfUid, selfName, partnerName }: Props) {
+export function TrendStrips({ checkins, selfPersonId, selfName, partnerName }: Props) {
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const days = useMemo(() => lastNDayKeys(HISTORY_DAYS), []);
 
@@ -42,11 +42,11 @@ export function TrendStrips({ checkins, selfUid, selfName, partnerName }: Props)
     for (const c of checkins) {
       const slot = map.get(c.date);
       if (!slot) continue;
-      if (c.uid === selfUid) slot.self = c;
+      if (c.personId === selfPersonId) slot.self = c;
       else slot.partner = c;
     }
     return map;
-  }, [checkins, days, selfUid]);
+  }, [checkins, days, selfPersonId]);
 
   const selected = selectedDay ? byDay.get(selectedDay) : undefined;
 

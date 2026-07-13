@@ -1,7 +1,9 @@
 /**
- * The `statuses` row each member keeps: weather of the heart, plus the Web
- * Push subscription the send-push Edge Function delivers to. Presence and
- * sparks are NOT here — they're ephemeral, and live on the realtime channel
+ * The `statuses` row each person keeps: weather of the heart. Shared across
+ * all of that person's devices. Push subscriptions are NOT here — they're
+ * per-device, in `devices` (see push.ts, which routes through an RPC since
+ * that table is closed to direct client access). Presence and sparks are
+ * NOT here either — they're ephemeral, and live on the realtime channel
  * (see realtime.ts).
  */
 import { onAppActive } from './lifecycle';
@@ -11,7 +13,7 @@ import type { MemberStatus, Weather } from './types';
 export type StatusMap = Record<string, MemberStatus>;
 
 interface StatusRow {
-  uid: string;
+  person_id: string;
   weather: Weather | null;
   weather_at: string | null;
 }
@@ -19,11 +21,11 @@ interface StatusRow {
 async function fetchStatuses(coupleId: string): Promise<StatusMap> {
   const { data } = await getClient()
     .from('statuses')
-    .select('uid, weather, weather_at')
+    .select('person_id, weather, weather_at')
     .eq('couple_id', coupleId);
   const map: StatusMap = {};
   for (const row of (data ?? []) as StatusRow[]) {
-    map[row.uid] = {
+    map[row.person_id] = {
       weather: row.weather ?? undefined,
       weatherAt: row.weather_at ?? undefined,
     };
@@ -31,7 +33,7 @@ async function fetchStatuses(coupleId: string): Promise<StatusMap> {
   return map;
 }
 
-/** Both members' statuses, live. */
+/** Both people's statuses, live. */
 export function subscribeStatuses(
   coupleId: string,
   onChange: (statuses: StatusMap) => void,
@@ -56,29 +58,17 @@ export function subscribeStatuses(
 
 export async function setWeather(
   coupleId: string,
-  uid: string,
+  personId: string,
   weather: Weather,
 ): Promise<void> {
   const { error } = await getClient().from('statuses').upsert(
     {
       couple_id: coupleId,
-      uid,
+      person_id: personId,
       weather,
       weather_at: new Date().toISOString(),
     },
-    { onConflict: 'couple_id,uid' },
-  );
-  if (error) throw new Error(error.message);
-}
-
-export async function savePushSubscription(
-  coupleId: string,
-  uid: string,
-  subscription: unknown | null,
-): Promise<void> {
-  const { error } = await getClient().from('statuses').upsert(
-    { couple_id: coupleId, uid, push_subscription: subscription },
-    { onConflict: 'couple_id,uid' },
+    { onConflict: 'couple_id,person_id' },
   );
   if (error) throw new Error(error.message);
 }

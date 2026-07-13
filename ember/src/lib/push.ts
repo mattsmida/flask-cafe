@@ -6,13 +6,14 @@
  * must be called from a user gesture — so enablePush is wired to a button
  * on the Us tab, never called on load.
  *
- * Delivery goes: this device saves its PushSubscription into its statuses
- * row → any action calls notifyPartner() → the send-push Edge Function
- * (which holds the VAPID private key) pushes to the partner's subscription.
+ * Delivery goes: this device saves its PushSubscription onto its own
+ * `devices` row (one person can have several — phone, desktop, ...; each
+ * device holds its own subscription) → any action calls notifyPartner() →
+ * the send-push Edge Function (which holds the VAPID private key) pushes
+ * to every device the partner PERSON has registered.
  */
 import { Platform } from 'react-native';
 import { isPushConfigured, supabaseConfig } from '../config/supabaseConfig';
-import { savePushSubscription } from './status';
 import { getClient } from './supabase';
 
 export type PushAvailability =
@@ -92,9 +93,10 @@ function urlBase64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
 
 /**
  * Asks for notification permission, subscribes, and saves the subscription
- * where the Edge Function can find it. Must run inside a user gesture.
+ * on this device's own row (via RPC — `devices` is closed to direct client
+ * access). Must run inside a user gesture.
  */
-export async function enablePush(coupleId: string, uid: string): Promise<void> {
+export async function enablePush(): Promise<void> {
   const availability = getPushAvailability();
   if (availability === 'needs-install') {
     throw new Error('Install Ember to your home screen first.');
@@ -112,7 +114,10 @@ export async function enablePush(coupleId: string, uid: string): Promise<void> {
     userVisibleOnly: true,
     applicationServerKey: urlBase64ToUint8Array(supabaseConfig.vapidPublicKey),
   });
-  await savePushSubscription(coupleId, uid, subscription.toJSON());
+  const { error } = await getClient().rpc('save_push_subscription', {
+    p_subscription: subscription.toJSON(),
+  });
+  if (error) throw new Error(error.message);
 }
 
 export type PushKind = 'spark' | 'answer' | 'checkin';

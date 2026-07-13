@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
-import { partnerUid } from '../lib/couple';
+import { partnerPersonId } from '../lib/couple';
 import { monthKey } from '../lib/dates';
 import {
   daysUntilUnlock,
@@ -27,8 +27,8 @@ interface Props {
 }
 
 export function LettersScreen({ session }: Props) {
-  const { uid, coupleId, couple } = session;
-  const pUid = partnerUid(session);
+  const { personId, coupleId, couple } = session;
+  const pId = partnerPersonId(session);
   const thisMonth = monthKey();
 
   const [letters, setLetters] = useState<Letter[]>([]);
@@ -40,14 +40,14 @@ export function LettersScreen({ session }: Props) {
 
   useEffect(() => subscribeLetters(coupleId, setLetters), [coupleId, refresh]);
 
-  const mineThisMonth = letters.find((l) => l.uid === uid && l.month === thisMonth);
-  const partnerName = (pUid && couple.names[pUid]) || 'Them';
+  const mineThisMonth = letters.find((l) => l.personId === personId && l.month === thisMonth);
+  const partnerName = (pId && couple.names[pId]) || 'Them';
 
   const send = async () => {
     if (!draft.trim()) return;
     setBusy(true);
     try {
-      await writeLetter(coupleId, uid, draft.trim());
+      await writeLetter(coupleId, personId, draft.trim());
       setDraft('');
       setRefresh((r) => r + 1);
     } finally {
@@ -55,8 +55,8 @@ export function LettersScreen({ session }: Props) {
     }
   };
 
-  const nameOf = (letterUid: string) =>
-    letterUid === uid ? 'You' : couple.names[letterUid] ?? partnerName;
+  const nameOf = (letterPersonId: string) =>
+    letterPersonId === personId ? 'You' : couple.names[letterPersonId] ?? partnerName;
 
   return (
     <KeyboardAvoidingView
@@ -106,10 +106,10 @@ export function LettersScreen({ session }: Props) {
         {letters.map((letter) => {
           const unlocked = isUnlocked(letter);
           return (
-            <Card key={`${letter.month}_${letter.uid}`}>
+            <Card key={`${letter.month}_${letter.personId}`}>
               <View style={styles.vaultHeader}>
                 <Text style={styles.vaultMonth}>
-                  {letter.month} · {nameOf(letter.uid)}
+                  {letter.month} · {nameOf(letter.personId)}
                 </Text>
                 <Text style={styles.vaultLock}>{unlocked ? '🔓' : '🔒'}</Text>
               </View>

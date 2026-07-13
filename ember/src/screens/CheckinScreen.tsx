@@ -13,7 +13,7 @@ import { Card } from '../components/Card';
 import { CheckinSlider } from '../components/CheckinSlider';
 import { TrendStrips } from '../components/TrendStrips';
 import { saveCheckin, subscribeRecentCheckins } from '../lib/checkins';
-import { partnerUid } from '../lib/couple';
+import { partnerPersonId } from '../lib/couple';
 import { todayKey } from '../lib/dates';
 import { notifyPartner } from '../lib/push';
 import type { Checkin, Session } from '../lib/types';
@@ -24,8 +24,8 @@ interface Props {
 }
 
 export function CheckinScreen({ session }: Props) {
-  const { uid, coupleId, couple } = session;
-  const pUid = partnerUid(session);
+  const { personId, coupleId, couple } = session;
+  const pId = partnerPersonId(session);
   const today = todayKey();
 
   const [checkins, setCheckins] = useState<Checkin[]>([]);
@@ -42,9 +42,10 @@ export function CheckinScreen({ session }: Props) {
     [coupleId],
   );
 
-  // Reflect an existing check-in for today (e.g. reopening the app).
+  // Reflect an existing check-in for today (e.g. reopening the app, or
+  // opening on a different device than the one you saved from).
   useEffect(() => {
-    const mine = checkins.find((c) => c.uid === uid && c.date === today);
+    const mine = checkins.find((c) => c.personId === personId && c.date === today);
     if (mine && !editing) {
       setEnergy(mine.energy);
       setHeart(mine.heart);
@@ -52,16 +53,16 @@ export function CheckinScreen({ session }: Props) {
       setWord(mine.word);
       setSavedToday(true);
     }
-  }, [checkins, uid, today, editing]);
+  }, [checkins, personId, today, editing]);
 
-  const partnerToday = pUid
-    ? checkins.find((c) => c.uid === pUid && c.date === today)
+  const partnerToday = pId
+    ? checkins.find((c) => c.personId === pId && c.date === today)
     : undefined;
 
   const save = async () => {
     setBusy(true);
     try {
-      await saveCheckin(coupleId, uid, today, {
+      await saveCheckin(coupleId, personId, today, {
         energy,
         heart,
         connection,
@@ -76,8 +77,8 @@ export function CheckinScreen({ session }: Props) {
     }
   };
 
-  const selfName = couple.names[uid] ?? 'You';
-  const partnerName = (pUid && couple.names[pUid]) || 'Them';
+  const selfName = couple.names[personId] ?? 'You';
+  const partnerName = (pId && couple.names[pId]) || 'Them';
 
   return (
     <KeyboardAvoidingView
@@ -146,7 +147,7 @@ export function CheckinScreen({ session }: Props) {
               {partnerToday.word ? ` · “${partnerToday.word}”` : ''}
             </Text>
           </Card>
-        ) : pUid ? (
+        ) : pId ? (
           <Card>
             <Text style={type.dim}>{partnerName} hasn’t checked in yet today.</Text>
           </Card>
@@ -155,7 +156,7 @@ export function CheckinScreen({ session }: Props) {
         <Card title="The last two weeks">
           <TrendStrips
             checkins={checkins}
-            selfUid={uid}
+            selfPersonId={personId}
             selfName={selfName}
             partnerName={partnerName}
           />
