@@ -2,12 +2,14 @@ import React, { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { AnswerHistory } from '../components/AnswerHistory';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { partnerPersonId } from '../lib/couple';
@@ -30,6 +32,7 @@ export function QuestionScreen({ session }: Props) {
   const [answers, setAnswers] = useState<Answer[]>([]);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   useEffect(
     () => subscribeAnswers(coupleId, today, setAnswers),
@@ -111,6 +114,28 @@ export function QuestionScreen({ session }: Props) {
             )}
           </>
         )}
+
+        {/* The look-back lives below the fold and loads nothing until
+            opened — today's blind answer flow above is untouched by it. */}
+        <View style={styles.lookBack}>
+          {showHistory ? (
+            <>
+              <View style={styles.lookBackHeader}>
+                <Text style={type.heading}>Past questions</Text>
+                <Pressable onPress={() => setShowHistory(false)} hitSlop={8}>
+                  <Text style={styles.hideLink}>Hide</Text>
+                </Pressable>
+              </View>
+              <AnswerHistory session={session} />
+            </>
+          ) : (
+            <Button
+              variant="ghost"
+              label="Look back at past questions"
+              onPress={() => setShowHistory(true)}
+            />
+          )}
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -132,6 +157,14 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   sealHint: { marginTop: spacing.sm, textAlign: 'center' },
+  lookBack: { marginTop: spacing.lg },
+  lookBackHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    marginBottom: spacing.md,
+  },
+  hideLink: { ...type.small, color: colors.textDim },
   waiting: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   waitingIcon: { fontSize: 26 },
   waitingText: { flex: 1 },

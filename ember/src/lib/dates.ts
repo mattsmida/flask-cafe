@@ -39,6 +39,17 @@ export function shortDayLabel(key: string): string {
   return `${names[date.getDay()]} ${d}`;
 }
 
+/** Fuller label like "Thu, Jul 17" for a YYYY-MM-DD key — the year is
+ * added ("Thu, Jul 17 2024") only once it isn't this year's. */
+export function prettyDayLabel(key: string): string {
+  const [y, m, d] = key.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const base = `${days[date.getDay()]}, ${months[m - 1]} ${d}`;
+  return y === new Date().getFullYear() ? base : `${base} ${y}`;
+}
+
 /** Deterministic non-negative hash — both phones pick the same daily item. */
 export function stableHash(s: string): number {
   let h = 2166136261;
