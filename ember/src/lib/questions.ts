@@ -5,7 +5,7 @@
  * The reveal is enforced by the server: the answers RLS policy hides your
  * partner's row until your own answer for that date exists.
  */
-import { stableHash } from './dates';
+import { dateKey, stableHash } from './dates';
 import { onAppActive } from './lifecycle';
 import { getClient, onCoupleTableChange } from './supabase';
 import { DAILY_QUESTIONS } from './questionBank';
@@ -39,6 +39,47 @@ interface AnswerRow {
 
 function toAnswer(row: AnswerRow): Answer {
   return { personId: row.person_id, date: row.date, text: row.text, at: row.at };
+}
+
+export interface AnswerHistoryPage {
+  answers: Answer[];
+  /** Pass back as `before` for the next page; null once history runs out. */
+  nextBefore: string | null;
+}
+
+function dayAfter(key: string): string {
+  const [y, m, d] = key.split('-').map(Number);
+  return dateKey(new Date(y, m - 1, d + 1));
+}
+
+/**
+ * One-shot page of past days' answers, newest first, strictly before
+ * `before`. The blind reveal carries over for free: on a day you never
+ * answered the server returns nothing at all, so every day that shows up
+ * here includes your own answer — a lone row can only be yours. Because
+ * the row limit can split a day in half, the cursor backs up to
+ * re-include the oldest day it saw; pages may therefore overlap by one
+ * day, and callers dedupe by (person, date).
+ */
+export async function fetchAnswerHistory(
+  coupleId: string,
+  before: string,
+  limit = 120,
+): Promise<AnswerHistoryPage> {
+  const { data, error } = await getClient()
+    .from('answers')
+    .select('person_id, date, text, at')
+    .eq('couple_id', coupleId)
+    .lt('date', before)
+    .order('date', { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  const answers = ((data ?? []) as AnswerRow[]).map(toAnswer);
+  const full = answers.length === limit;
+  return {
+    answers,
+    nextBefore: full ? dayAfter(answers[answers.length - 1].date) : null,
+  };
 }
 
 /**
