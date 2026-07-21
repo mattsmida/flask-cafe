@@ -1,25 +1,19 @@
-import type { Timestamp } from 'firebase/firestore';
-
 export type Weather = 'sunny' | 'cloudy' | 'stormy';
 
 export interface Couple {
+  id: string;
   code: string;
   members: string[]; // uids, max 2
   names: Record<string, string>; // uid -> display name
-  createdAt: Timestamp;
 }
 
-/** One per member, at couples/{id}/status/{uid}. Small and hot: heartbeats, weather, sparks. */
+/** One row per member in `statuses`: weather of the heart + push subscription. */
 export interface MemberStatus {
-  name: string;
-  lastActiveAt?: Timestamp;
-  weather?: Weather;
-  weatherAt?: Timestamp;
-  sparkAt?: Timestamp;
-  pushToken?: string;
+  weather?: Weather | null;
+  weatherAt?: string | null; // ISO timestamp
 }
 
-/** At couples/{id}/checkins/{date}_{uid}. Sliders are 0–100. */
+/** One per person per local day in `checkins`. Sliders are 0–100. */
 export interface Checkin {
   uid: string;
   date: string; // YYYY-MM-DD
@@ -27,25 +21,29 @@ export interface Checkin {
   heart: number;
   connection: number;
   word: string;
-  at: Timestamp;
+  at: string; // ISO timestamp
 }
 
-/** At couples/{id}/answers/{date}_{uid}. Revealed in the UI only once both exist. */
+/** In `answers`; the server reveals the partner's row only once yours exists. */
 export interface Answer {
   uid: string;
   date: string;
   text: string;
-  at: Timestamp;
+  at: string;
 }
 
-/** At couples/{id}/letters/{month}_{uid}. Hidden from everyone until unlockAt. */
+/**
+ * From `letters` + the `letter_meta` view. While locked, the server never
+ * sends prompt/text — the row carries only metadata for the countdown.
+ */
 export interface Letter {
   uid: string;
   month: string; // YYYY-MM
-  prompt: string;
-  text: string;
-  writtenAt: Timestamp;
-  unlockAt: Timestamp;
+  writtenAt: string;
+  unlockAt: string;
+  locked: boolean;
+  prompt?: string;
+  text?: string;
 }
 
 export interface Session {

@@ -1,8 +1,18 @@
-import React from 'react';
-import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import {
+  Alert,
+  Platform,
+  Pressable,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { leaveLocally, partnerUid } from '../lib/couple';
+import { enablePush, getPushState, type PushState } from '../lib/push';
 import type { Session } from '../lib/types';
 import { colors, radius, spacing, type } from '../theme';
 
@@ -12,31 +22,52 @@ interface Props {
 }
 
 export function UsScreen({ session, onLeft }: Props) {
-  const { uid, couple } = session;
+  const { uid, coupleId, couple } = session;
   const pUid = partnerUid(session);
+
+  const [pushState, setPushState] = useState<PushState>(() => getPushState());
+  const [pushBusy, setPushBusy] = useState(false);
 
   const shareCode = () => {
     Share.share({
       message: `Join me on Ember — our own little space. Code: ${couple.code}`,
-    }).catch(() => {});
+    }).catch(() => {
+      if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        navigator.clipboard.writeText(couple.code).catch(() => {});
+      }
+    });
+  };
+
+  const onEnablePush = async () => {
+    setPushBusy(true);
+    try {
+      setPushState(await enablePush(coupleId, uid));
+    } finally {
+      setPushBusy(false);
+    }
   };
 
   const confirmLeave = () => {
-    Alert.alert(
-      'Sign out on this phone?',
-      'Nothing is deleted — your shared space stays intact, and you can rejoin anytime with your invite code.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign out',
-          style: 'destructive',
-          onPress: async () => {
-            await leaveLocally();
-            onLeft();
-          },
+    const message =
+      'Nothing is deleted — your shared space stays intact, and you can rejoin anytime with your invite code.';
+    if (Platform.OS === 'web') {
+      // Alert.alert can't show buttons on web.
+      if (typeof window !== 'undefined' && window.confirm(`Sign out on this device?\n\n${message}`)) {
+        leaveLocally().then(onLeft);
+      }
+      return;
+    }
+    Alert.alert('Sign out on this phone?', message, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Sign out',
+        style: 'destructive',
+        onPress: async () => {
+          await leaveLocally();
+          onLeft();
         },
-      ],
-    );
+      },
+    ]);
   };
 
   return (
@@ -56,6 +87,37 @@ export function UsScreen({ session, onLeft }: Props) {
         </View>
       </Card>
 
+      {pushState !== 'unsupported' && (
+        <Card title="Notifications">
+          {pushState === 'enabled' ? (
+            <Text style={type.dim}>
+              Notifications are on — sparks, check-ins, and sealed answers will
+              reach this device even when Ember is closed.
+            </Text>
+          ) : pushState === 'need-install' ? (
+            <Text style={type.dim}>
+              To get notifications on an iPhone, first add Ember to your Home
+              Screen: tap the Share button in Safari, choose “Add to Home
+              Screen”, then open Ember from there and come back to this tab.
+            </Text>
+          ) : pushState === 'denied' ? (
+            <Text style={type.dim}>
+              Notifications were declined for Ember on this device. To change
+              your mind, allow them again in your browser or system settings,
+              then reopen the app.
+            </Text>
+          ) : (
+            <>
+              <Text style={[type.dim, styles.pushLede]}>
+                Get a gentle nudge when {pUid ? couple.names[pUid] : 'your person'} sends
+                a spark, checks in, or seals an answer — even when Ember is closed.
+              </Text>
+              <Button label="Enable notifications" onPress={onEnablePush} busy={pushBusy} />
+            </>
+          )}
+        </Card>
+      )}
+
       <Card title="Invite code">
         <Pressable onPress={shareCode} style={styles.codeBox}>
           <Text style={styles.code}>{couple.code}</Text>
@@ -74,7 +136,7 @@ export function UsScreen({ session, onLeft }: Props) {
         </Text>
       </Card>
 
-      <Button label="Sign out on this phone" variant="ghost" onPress={confirmLeave} />
+      <Button label="Sign out on this device" variant="ghost" onPress={confirmLeave} />
     </ScrollView>
   );
 }
@@ -90,6 +152,7 @@ const styles = StyleSheet.create({
   },
   memberDotSelf: { color: colors.ember, fontSize: 14 },
   memberDotPartner: { color: colors.violet, fontSize: 14 },
+  pushLede: { marginBottom: spacing.md },
   codeBox: {
     alignItems: 'center',
     backgroundColor: colors.cardRaised,

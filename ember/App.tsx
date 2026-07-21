@@ -3,7 +3,8 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { loadSession, subscribeCouple } from './src/lib/couple';
-import { isFirebaseConfigured } from './src/lib/firebase';
+import { syncPushSubscription } from './src/lib/push';
+import { isSupabaseConfigured } from './src/lib/supabase';
 import type { Session } from './src/lib/types';
 import { CheckinScreen } from './src/screens/CheckinScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
@@ -25,7 +26,7 @@ const TABS: { key: Tab; icon: string; label: string }[] = [
 ];
 
 export default function App() {
-  const configured = isFirebaseConfigured();
+  const configured = isSupabaseConfigured();
   const [booting, setBooting] = useState(configured);
   const [session, setSession] = useState<Session | null>(null);
   const [tab, setTab] = useState<Tab>('today');
@@ -40,12 +41,19 @@ export default function App() {
 
   // Keep couple metadata live (partner joining, names changing).
   const coupleId = session?.coupleId;
+  const uid = session?.uid;
   useEffect(() => {
     if (!coupleId) return;
     return subscribeCouple(coupleId, (couple) => {
       setSession((prev) => (prev ? { ...prev, couple } : prev));
     });
   }, [coupleId]);
+
+  // Push endpoints rotate; keep the stored subscription fresh (web no-ops
+  // unless notifications were already enabled).
+  useEffect(() => {
+    if (coupleId && uid) syncPushSubscription(coupleId, uid);
+  }, [coupleId, uid]);
 
   let body: React.ReactNode;
   if (!configured) {
@@ -98,7 +106,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        {body}
+        <View style={styles.shell}>{body}</View>
         <StatusBar style="light" />
       </SafeAreaView>
     </SafeAreaProvider>
@@ -107,6 +115,9 @@ export default function App() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
+  // On desktop browsers the app lives in a centered phone-width column;
+  // on actual phones maxWidth never bites.
+  shell: { flex: 1, width: '100%', maxWidth: 560, alignSelf: 'center' },
   center: {
     flex: 1,
     backgroundColor: colors.bg,

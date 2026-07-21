@@ -1,47 +1,110 @@
 /**
- * Best-effort push for sparks, via Expo's push service — the sender's phone
- * calls the Expo push API directly, so no server is needed.
+ * Real push notifications, no Apple Developer Program: the app runs as an
+ * installed web app (Add to Home Screen) and uses standard Web Push — which
+ * iOS supports since 16.4 for installed home-screen apps.
  *
- * Note: Expo Go (SDK 53+) no longer supports receiving remote pushes; in Expo
- * Go, sparks still arrive live whenever the app is open (Firestore listener).
- * Build a development build or TestFlight build to get real notifications.
+ * The browser's PushSubscription is stored in statuses.push_subscription;
+ * sending happens in the `send-push` Supabase Edge Function (it looks up the
+ * partner's subscription server-side, so clients never see each other's).
  */
-import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
+import { isPushConfigured, supabaseConfig } from '../config/supabaseConfig';
+import { savePushSubscription } from './status';
+import { getSupabase } from './supabase';
 
-export async function registerForPush(): Promise<string | null> {
+export type PushState =
+  | 'unsupported' // native app, old browser, or push not configured
+  | 'need-install' // iOS Safari tab: must Add to Home Screen first
+  | 'denied' // permission was refused; only browser settings can undo that
+  | 'ready' // supported, waiting for the user to enable
+  | 'enabled';
+
+function isIos(): boolean {
+  return typeof navigator !== 'undefined' && /iPhone|iPad|iPod/.test(navigator.userAgent);
+}
+
+function isInstalled(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    window.matchMedia?.('(display-mode: standalone)').matches ||
+    (navigator as { standalone?: boolean }).standalone === true
+  );
+}
+
+export function getPushState(): PushState {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return 'unsupported';
+  if (!isPushConfigured()) return 'unsupported';
+  const supported =
+    'serviceWorker' in navigator && 'Notification' in window && 'PushManager' in window;
+  if (!supported) {
+    // iOS Safari only exposes the push API to installed home-screen apps.
+    return isIos() && !isInstalled() ? 'need-install' : 'unsupported';
+  }
+  if (Notification.permission === 'denied') return 'denied';
+  if (Notification.permission === 'granted') return 'enabled';
+  return 'ready';
+}
+
+function urlBase64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
+  const padding = '='.repeat((4 - (base64.length % 4)) % 4);
+  const b64 = (base64 + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(b64);
+  const bytes = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+  return bytes;
+}
+
+/**
+ * Ask for permission and store this device's subscription.
+ * Must be called from a user gesture (iOS enforces this).
+ */
+export async function enablePush(coupleId: string, uid: string): Promise<PushState> {
+  const state = getPushState();
+  if (state !== 'ready' && state !== 'enabled') return state;
   try {
-    if (!Device.isDevice) return null;
-    const { status: existing } = await Notifications.getPermissionsAsync();
-    let status = existing;
-    if (existing !== 'granted') {
-      ({ status } = await Notifications.requestPermissionsAsync());
-    }
-    if (status !== 'granted') return null;
-    const token = await Notifications.getExpoPushTokenAsync();
-    return token.data;
+    const registration = await navigator.serviceWorker.ready;
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') return getPushState();
+    const subscription =
+      (await registration.pushManager.getSubscription()) ??
+      (await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(supabaseConfig.vapidPublicKey),
+      }));
+    await savePushSubscription(coupleId, uid, subscription.toJSON());
+    return 'enabled';
   } catch {
-    // Expo Go can't register for remote push — quietly fall back to in-app sparks.
-    return null;
+    return getPushState();
   }
 }
 
-export async function sendSparkPush(
-  pushToken: string,
-  fromName: string,
-): Promise<void> {
+/**
+ * If permission is already granted, quietly make sure the stored
+ * subscription is current (endpoints rotate). Call on app start.
+ */
+export async function syncPushSubscription(coupleId: string, uid: string): Promise<void> {
+  if (getPushState() !== 'enabled') return;
   try {
-    await fetch('https://exp.host/--/api/v2/push/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        to: pushToken,
-        title: '✨ A spark',
-        body: `${fromName} is thinking of you.`,
-        sound: 'default',
-      }),
-    });
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.getSubscription();
+    if (subscription) await savePushSubscription(coupleId, uid, subscription.toJSON());
   } catch {
-    // The spark still lands via Firestore; push is a bonus.
+    // Push stays best-effort.
+  }
+}
+
+export type PushKind = 'spark' | 'checkin' | 'answer';
+
+/**
+ * Fire-and-forget: ask the edge function to notify the partner. Everything
+ * still lands live via Realtime; push is for when their app is closed.
+ */
+export function sendPush(coupleId: string, type: PushKind): void {
+  try {
+    getSupabase()
+      .functions.invoke('send-push', { body: { couple_id: coupleId, type } })
+      .catch(() => {});
+  } catch {
+    // Not configured — nothing to do.
   }
 }

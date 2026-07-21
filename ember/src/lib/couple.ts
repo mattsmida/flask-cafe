@@ -1,115 +1,103 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {
-  arrayUnion,
-  collection,
-  doc,
-  getDoc,
-  onSnapshot,
-  runTransaction,
-  serverTimestamp,
-  setDoc,
-} from 'firebase/firestore';
-import { ensureSignedIn, getDb } from './firebase';
+import { ensureSignedIn, getSupabase, watchTable } from './supabase';
 import type { Couple, Session } from './types';
 
 const COUPLE_ID_KEY = 'ember.coupleId';
 
-/** Codes avoid lookalike characters (0/O, 1/I/L) so they survive being read over a call. */
-const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+interface MemberRow {
+  uid: string;
+  name: string;
+}
 
-function makeCode(): string {
-  let code = '';
-  for (let i = 0; i < 6; i++) {
-    code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
-  }
-  return code;
+async function fetchCouple(coupleId: string): Promise<Couple | null> {
+  const { data, error } = await getSupabase()
+    .from('couples')
+    .select('id, code, members (uid, name)')
+    .eq('id', coupleId)
+    .maybeSingle();
+  if (error || !data) return null;
+  const members = (data.members ?? []) as MemberRow[];
+  return {
+    id: data.id as string,
+    code: data.code as string,
+    members: members.map((m) => m.uid),
+    names: Object.fromEntries(members.map((m) => [m.uid, m.name])),
+  };
 }
 
 export async function loadSession(): Promise<Session | null> {
-  const user = await ensureSignedIn();
+  const uid = await ensureSignedIn();
   const coupleId = await AsyncStorage.getItem(COUPLE_ID_KEY);
   if (!coupleId) return null;
-  const snap = await getDoc(doc(getDb(), 'couples', coupleId));
-  const couple = snap.data() as Couple | undefined;
-  if (!couple || !couple.members.includes(user.uid)) {
+  const couple = await fetchCouple(coupleId);
+  if (!couple || !couple.members.includes(uid)) {
     await AsyncStorage.removeItem(COUPLE_ID_KEY);
     return null;
   }
-  return { uid: user.uid, coupleId, couple };
+  return { uid, coupleId, couple };
 }
 
-export async function createCouple(name: string): Promise<Session> {
-  const user = await ensureSignedIn();
-  const db = getDb();
-  const code = makeCode();
-  const coupleRef = doc(collection(db, 'couples'));
-  const couple: Omit<Couple, 'createdAt'> = {
-    code,
-    members: [user.uid],
-    names: { [user.uid]: name },
-  };
-  await setDoc(coupleRef, { ...couple, createdAt: serverTimestamp() });
-  // Code -> couple lookup, so joining only requires knowing the code.
-  await setDoc(doc(db, 'inviteCodes', code), { coupleId: coupleRef.id });
-  await setDoc(doc(db, 'couples', coupleRef.id, 'status', user.uid), {
-    name,
-    lastActiveAt: serverTimestamp(),
-  });
-  await AsyncStorage.setItem(COUPLE_ID_KEY, coupleRef.id);
-  const snap = await getDoc(coupleRef);
-  return { uid: user.uid, coupleId: coupleRef.id, couple: snap.data() as Couple };
-}
-
-export async function joinCouple(rawCode: string, name: string): Promise<Session> {
-  const user = await ensureSignedIn();
-  const db = getDb();
-  const code = rawCode.trim().toUpperCase();
-  const inviteSnap = await getDoc(doc(db, 'inviteCodes', code));
-  if (!inviteSnap.exists()) {
-    throw new Error('That code doesn’t match any space. Check it and try again.');
+async function sessionFromRpc(
+  rpc: 'create_couple' | 'join_couple',
+  args: Record<string, string>,
+): Promise<Session> {
+  const uid = await ensureSignedIn();
+  const { data, error } = await getSupabase().rpc(rpc, args);
+  if (error) {
+    // The RPCs raise exceptions with user-facing sentences; pass them through.
+    throw new Error(error.message || 'Something went wrong. Try again.');
   }
-  const coupleId = (inviteSnap.data() as { coupleId: string }).coupleId;
-  const coupleRef = doc(db, 'couples', coupleId);
-
-  await runTransaction(db, async (tx) => {
-    const snap = await tx.get(coupleRef);
-    const couple = snap.data() as Couple | undefined;
-    if (!couple) throw new Error('That space no longer exists.');
-    if (couple.members.includes(user.uid)) return; // already in — rejoining
-    if (couple.members.length >= 2) {
-      throw new Error('That space already has two people in it.');
-    }
-    tx.update(coupleRef, {
-      members: arrayUnion(user.uid),
-      [`names.${user.uid}`]: name,
-    });
-  });
-
-  await setDoc(
-    doc(db, 'couples', coupleId, 'status', user.uid),
-    { name, lastActiveAt: serverTimestamp() },
-    { merge: true },
-  );
+  const coupleId = (data as { couple_id: string }).couple_id;
+  const couple = await fetchCouple(coupleId);
+  if (!couple) throw new Error('Could not load your space. Try again.');
   await AsyncStorage.setItem(COUPLE_ID_KEY, coupleId);
-  const snap = await getDoc(coupleRef);
-  return { uid: user.uid, coupleId, couple: snap.data() as Couple };
+  return { uid, coupleId, couple };
 }
 
-/** Keeps couple metadata (partner joining, names) live after startup. */
+export function createCouple(name: string): Promise<Session> {
+  return sessionFromRpc('create_couple', { p_name: name });
+}
+
+export function joinCouple(rawCode: string, name: string): Promise<Session> {
+  return sessionFromRpc('join_couple', {
+    p_code: rawCode.trim().toUpperCase(),
+    p_name: name,
+  });
+}
+
+/**
+ * Keeps couple metadata (partner joining, names) live after startup.
+ * The interval refetch matters most while you're waiting for the partner
+ * to join — their INSERT event can beat the realtime socket being ready.
+ */
 export function subscribeCouple(
   coupleId: string,
   onChange: (couple: Couple) => void,
 ): () => void {
-  return onSnapshot(doc(getDb(), 'couples', coupleId), (snap) => {
-    if (snap.exists()) onChange(snap.data() as Couple);
-  });
+  let memberCount = 2;
+  const refetch = () => {
+    fetchCouple(coupleId).then((couple) => {
+      if (couple) {
+        memberCount = couple.members.length;
+        onChange(couple);
+      }
+    });
+  };
+  const stop = watchTable('members', coupleId, refetch);
+  const timer = setInterval(() => {
+    if (memberCount < 2) refetch();
+  }, 15_000);
+  return () => {
+    clearInterval(timer);
+    stop();
+  };
 }
 
 export function partnerUid(session: Session): string | null {
   return session.couple.members.find((m) => m !== session.uid) ?? null;
 }
 
-/** Local sign-out only: forgets the space on this phone, deletes nothing. */
+/** Local sign-out only: forgets the space on this device, deletes nothing. */
 export async function leaveLocally(): Promise<void> {
   await AsyncStorage.removeItem(COUPLE_ID_KEY);
 }

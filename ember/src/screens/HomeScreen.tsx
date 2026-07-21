@@ -13,15 +13,12 @@ import { Card } from '../components/Card';
 import { GlowOrb } from '../components/GlowOrb';
 import { WEATHER_META, WeatherPicker } from '../components/WeatherPicker';
 import { partnerUid } from '../lib/couple';
-import { registerForPush, sendSparkPush } from '../lib/push';
+import { sendPush } from '../lib/push';
 import {
-  beatHeart,
-  HEARTBEAT_INTERVAL_MS,
-  PRESENCE_WINDOW_MS,
-  savePushToken,
-  sendSpark,
+  connectLive,
   setWeather,
   subscribeStatus,
+  type LiveConnection,
 } from '../lib/status';
 import type { MemberStatus, Session, Weather } from '../lib/types';
 import { colors, radius, spacing, type } from '../theme';
@@ -37,44 +34,30 @@ export function HomeScreen({ session }: Props) {
 
   const [myStatus, setMyStatus] = useState<MemberStatus | null>(null);
   const [partnerStatus, setPartnerStatus] = useState<MemberStatus | null>(null);
-  const [now, setNow] = useState(Date.now());
+  const [partnerHere, setPartnerHere] = useState(false);
   const [sparkPulse, setSparkPulse] = useState(0);
-  const lastSeenSparkRef = useRef<number | null>(null);
+  const connRef = useRef<LiveConnection | null>(null);
 
-  // Own heartbeat while the app is foregrounded — this is the presence signal.
+  // The live channel: our presence (tracked while foregrounded), the
+  // partner's presence, and incoming sparks.
   useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | null = null;
-    const start = () => {
-      beatHeart(coupleId, uid).catch(() => {});
-      if (!interval) {
-        interval = setInterval(
-          () => beatHeart(coupleId, uid).catch(() => {}),
-          HEARTBEAT_INTERVAL_MS,
-        );
-      }
-    };
-    const stop = () => {
-      if (interval) {
-        clearInterval(interval);
-        interval = null;
-      }
-    };
-    start();
+    const conn = connectLive(coupleId, uid, {
+      onPartnerPresence: setPartnerHere,
+      onSpark: () => {
+        setSparkPulse((p) => p + 1);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      },
+    });
+    connRef.current = conn;
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') start();
-      else stop();
+      conn.setActive(state === 'active');
     });
     return () => {
-      stop();
       sub.remove();
+      connRef.current = null;
+      conn.close();
     };
   }, [coupleId, uid]);
-
-  // A slow tick so "present" fades out without any new snapshot arriving.
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 10_000);
-    return () => clearInterval(t);
-  }, []);
 
   useEffect(() => subscribeStatus(coupleId, uid, setMyStatus), [coupleId, uid]);
   useEffect(() => {
@@ -82,43 +65,10 @@ export function HomeScreen({ session }: Props) {
     return subscribeStatus(coupleId, pUid, setPartnerStatus);
   }, [coupleId, pUid]);
 
-  // Register for push once we're in a couple (no-op inside Expo Go).
-  useEffect(() => {
-    registerForPush().then((token) => {
-      if (token) savePushToken(coupleId, uid, token).catch(() => {});
-    });
-  }, [coupleId, uid]);
-
-  // Incoming spark: flare the orb once per new sparkAt.
-  useEffect(() => {
-    const at = partnerStatus?.sparkAt?.toMillis?.();
-    if (!at) return;
-    if (lastSeenSparkRef.current === null) {
-      // First snapshot after mount: only celebrate reasonably fresh sparks.
-      lastSeenSparkRef.current = at;
-      if (Date.now() - at < 60_000) {
-        setSparkPulse((p) => p + 1);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      }
-      return;
-    }
-    if (at > lastSeenSparkRef.current) {
-      lastSeenSparkRef.current = at;
-      setSparkPulse((p) => p + 1);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    }
-  }, [partnerStatus?.sparkAt]);
-
-  const partnerHere =
-    !!partnerStatus?.lastActiveAt &&
-    now - partnerStatus.lastActiveAt.toMillis() < PRESENCE_WINDOW_MS;
-
-  const onSpark = async () => {
+  const onSpark = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    await sendSpark(coupleId, uid).catch(() => {});
-    if (partnerStatus?.pushToken) {
-      sendSparkPush(partnerStatus.pushToken, couple.names[uid] ?? 'Someone');
-    }
+    connRef.current?.sendSpark(); // lands live if their app is open…
+    sendPush(coupleId, 'spark'); // …and as a notification if it isn't.
   };
 
   const onWeather = (w: Weather) => {
@@ -128,7 +78,12 @@ export function HomeScreen({ session }: Props) {
   const shareCode = () => {
     Share.share({
       message: `Join me on Ember — our own little space. Code: ${couple.code}`,
-    }).catch(() => {});
+    }).catch(() => {
+      // No share sheet (desktop browser): copy instead.
+      if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        navigator.clipboard.writeText(couple.code).catch(() => {});
+      }
+    });
   };
 
   return (
@@ -169,7 +124,7 @@ export function HomeScreen({ session }: Props) {
           </Pressable>
 
           <Card title="Weather of the heart">
-            <WeatherPicker value={myStatus?.weather} onSelect={onWeather} />
+            <WeatherPicker value={myStatus?.weather ?? undefined} onSelect={onWeather} />
             <View style={styles.partnerWeather}>
               <Text style={type.dim}>
                 {partnerStatus?.weather

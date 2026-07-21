@@ -1,60 +1,40 @@
 /**
- * The hot little status doc each member keeps: heartbeat (presence),
- * weather of the heart, and the last spark. One doc per person so the
- * partner can watch it with a single listener.
+ * The live layer for the Today screen.
+ *
+ * Presence and sparks are ephemeral: they ride a Supabase Realtime channel
+ * (`couple:{id}`) using built-in Presence and Broadcast — nothing stored,
+ * nothing to clean up. Weather of the heart and the web-push subscription
+ * are the only per-member state that persists (the `statuses` table).
  */
-import {
-  doc,
-  onSnapshot,
-  serverTimestamp,
-  setDoc,
-} from 'firebase/firestore';
-import { getDb } from './firebase';
+import type { RealtimeChannel } from '@supabase/supabase-js';
+import { getSupabase, watchTable } from './supabase';
 import type { MemberStatus, Weather } from './types';
 
-/** Partner counts as "here now" if their heartbeat is younger than this. */
-export const PRESENCE_WINDOW_MS = 45_000;
-/** How often we refresh our own heartbeat while the app is foregrounded. */
-export const HEARTBEAT_INTERVAL_MS = 25_000;
-
-function statusRef(coupleId: string, uid: string) {
-  return doc(getDb(), 'couples', coupleId, 'status', uid);
-}
-
-export function beatHeart(coupleId: string, uid: string): Promise<void> {
-  return setDoc(
-    statusRef(coupleId, uid),
-    { lastActiveAt: serverTimestamp() },
-    { merge: true },
-  );
-}
-
-export function setWeather(
+export async function setWeather(
   coupleId: string,
   uid: string,
   weather: Weather,
 ): Promise<void> {
-  return setDoc(
-    statusRef(coupleId, uid),
-    { weather, weatherAt: serverTimestamp() },
-    { merge: true },
-  );
+  const { error } = await getSupabase().from('statuses').upsert({
+    couple_id: coupleId,
+    uid,
+    weather,
+    weather_at: new Date().toISOString(),
+  });
+  if (error) throw new Error(error.message);
 }
 
-export function sendSpark(coupleId: string, uid: string): Promise<void> {
-  return setDoc(
-    statusRef(coupleId, uid),
-    { sparkAt: serverTimestamp() },
-    { merge: true },
-  );
-}
-
-export function savePushToken(
+export async function savePushSubscription(
   coupleId: string,
   uid: string,
-  pushToken: string,
+  subscription: unknown,
 ): Promise<void> {
-  return setDoc(statusRef(coupleId, uid), { pushToken }, { merge: true });
+  const { error } = await getSupabase().from('statuses').upsert({
+    couple_id: coupleId,
+    uid,
+    push_subscription: subscription,
+  });
+  if (error) throw new Error(error.message);
 }
 
 export function subscribeStatus(
@@ -62,7 +42,69 @@ export function subscribeStatus(
   uid: string,
   onChange: (status: MemberStatus | null) => void,
 ): () => void {
-  return onSnapshot(statusRef(coupleId, uid), (snap) => {
-    onChange(snap.exists() ? (snap.data() as MemberStatus) : null);
+  const refetch = async () => {
+    const { data } = await getSupabase()
+      .from('statuses')
+      .select('weather, weatherAt:weather_at')
+      .eq('couple_id', coupleId)
+      .eq('uid', uid)
+      .maybeSingle();
+    onChange((data as MemberStatus | null) ?? null);
+  };
+  return watchTable('statuses', coupleId, refetch);
+}
+
+export interface LiveHandlers {
+  onPartnerPresence: (present: boolean) => void;
+  onSpark: () => void;
+}
+
+export interface LiveConnection {
+  /** Broadcast a spark to the partner (they hear it only while connected). */
+  sendSpark: () => void;
+  /** Track/untrack presence as the app foregrounds/backgrounds. */
+  setActive: (active: boolean) => void;
+  close: () => void;
+}
+
+export function connectLive(
+  coupleId: string,
+  uid: string,
+  handlers: LiveHandlers,
+): LiveConnection {
+  const sb = getSupabase();
+  const channel: RealtimeChannel = sb.channel(`couple:${coupleId}`, {
+    config: { presence: { key: uid }, broadcast: { self: false } },
   });
+  let joined = false;
+  let wantTracked = true;
+
+  channel.on('presence', { event: 'sync' }, () => {
+    const state = channel.presenceState();
+    handlers.onPartnerPresence(Object.keys(state).some((key) => key !== uid));
+  });
+  channel.on('broadcast', { event: 'spark' }, ({ payload }) => {
+    if (payload?.from !== uid) handlers.onSpark();
+  });
+  channel.subscribe((status) => {
+    if (status === 'SUBSCRIBED') {
+      joined = true;
+      if (wantTracked) channel.track({ at: new Date().toISOString() });
+    }
+  });
+
+  return {
+    sendSpark: () => {
+      channel.send({ type: 'broadcast', event: 'spark', payload: { from: uid } });
+    },
+    setActive: (active: boolean) => {
+      wantTracked = active;
+      if (!joined) return;
+      if (active) channel.track({ at: new Date().toISOString() });
+      else channel.untrack();
+    },
+    close: () => {
+      sb.removeChannel(channel);
+    },
+  };
 }

@@ -1,13 +1,8 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "strict": true,
-    "paths": {
-      // Type against the react-native build of firebase auth (the one Metro
-      // actually loads); the package's export map lists "types" before
-      // "react-native", so TS would otherwise see the web typings, which lack
-      // getReactNativePersistence.
-      "@firebase/auth": ["./node_modules/@firebase/auth/dist/rn/index.rn.d.ts"]
-    }
-  }
+    "strict": true
+  },
+  // The edge function is Deno code with npm: specifiers — not part of the app.
+  "exclude": ["supabase/functions"]
 }
